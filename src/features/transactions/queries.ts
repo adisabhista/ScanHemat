@@ -1,17 +1,9 @@
 import { Prisma } from "@prisma/client";
 
+import { normalizeTransactionFilters, type TransactionFilters } from "@/features/transactions/period-filter";
 import { prisma } from "@/lib/prisma";
 
-export type TransactionPeriod = "month" | "year" | "all" | "custom";
-
-export type TransactionFilters = {
-  period?: TransactionPeriod;
-  month?: number;
-  year?: number;
-  startDate?: string;
-  endDate?: string;
-  categoryId?: string;
-};
+export type { TransactionFilters, TransactionPeriod } from "@/features/transactions/period-filter";
 
 export function getMonthRange(year: number, month: number) {
   const start = new Date(Date.UTC(year, month - 1, 1));
@@ -46,21 +38,19 @@ function addUtcDays(value: Date, days: number) {
 }
 
 export function getTransactionDateRange(filters: TransactionFilters = {}, now = new Date()) {
-  const period = filters.period ?? "month";
-  const selectedYear = filters.year ?? now.getUTCFullYear();
-  const selectedMonth = filters.month ?? now.getUTCMonth() + 1;
+  const normalized = normalizeTransactionFilters(filters, now);
 
-  if (period === "all") {
+  if (normalized.period === "all") {
     return {};
   }
 
-  if (period === "year") {
-    return getYearRange(selectedYear);
+  if (normalized.period === "year") {
+    return getYearRange(normalized.year!);
   }
 
-  if (period === "custom") {
-    const start = parseInputDate(filters.startDate);
-    const end = parseInputDate(filters.endDate);
+  if (normalized.period === "custom") {
+    const start = parseInputDate(normalized.startDate);
+    const end = parseInputDate(normalized.endDate);
 
     return {
       ...(start ? { start } : {}),
@@ -68,30 +58,28 @@ export function getTransactionDateRange(filters: TransactionFilters = {}, now = 
     };
   }
 
-  return getMonthRange(selectedYear, selectedMonth);
+  return getMonthRange(normalized.year!, normalized.month!);
 }
 
 export function getFilterLabel(filters: TransactionFilters = {}, now = new Date()) {
-  const period = filters.period ?? "month";
-  const selectedYear = filters.year ?? now.getUTCFullYear();
-  const selectedMonth = filters.month ?? now.getUTCMonth() + 1;
+  const normalized = normalizeTransactionFilters(filters, now);
 
-  if (period === "year") {
-    return `Tahun ${selectedYear}`;
+  if (normalized.period === "year") {
+    return `Tahun ${normalized.year}`;
   }
 
-  if (period === "all") {
+  if (normalized.period === "all") {
     return "Semua Waktu";
   }
 
-  if (period === "custom") {
+  if (normalized.period === "custom") {
     return "Rentang Kustom";
   }
 
   return new Intl.DateTimeFormat("id-ID", {
     month: "long",
     year: "numeric"
-  }).format(new Date(Date.UTC(selectedYear, selectedMonth - 1, 1)));
+  }).format(new Date(Date.UTC(normalized.year!, normalized.month! - 1, 1)));
 }
 
 export async function getTransactions(userId: string, filters: TransactionFilters = {}) {

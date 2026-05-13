@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { normalizeTransactionFilters, normalizeTransactionPeriod } from "@/features/transactions/period-filter";
 import { getTransactions } from "@/features/transactions/queries";
 import { requireUserId } from "@/lib/auth";
 import { buildTransactionsCsv } from "@/lib/csv/transactions-export";
@@ -8,12 +9,13 @@ import { transactionFilterSchema } from "@/lib/validation/transaction";
 export async function GET(request: Request) {
   const userId = await requireUserId();
   const url = new URL(request.url);
+  const requestedPeriod = normalizeTransactionPeriod(url.searchParams.get("period") || undefined);
   const parsed = transactionFilterSchema.safeParse({
-    period: url.searchParams.get("period") || undefined,
-    month: url.searchParams.get("month") || undefined,
-    year: url.searchParams.get("year") || undefined,
-    startDate: url.searchParams.get("startDate") || undefined,
-    endDate: url.searchParams.get("endDate") || undefined,
+    period: requestedPeriod,
+    month: requestedPeriod === "month" ? url.searchParams.get("month") || undefined : undefined,
+    year: requestedPeriod === "month" || requestedPeriod === "year" ? url.searchParams.get("year") || undefined : undefined,
+    startDate: requestedPeriod === "custom" ? url.searchParams.get("startDate") || undefined : undefined,
+    endDate: requestedPeriod === "custom" ? url.searchParams.get("endDate") || undefined : undefined,
     categoryId: url.searchParams.get("categoryId") || undefined
   });
 
@@ -21,7 +23,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Filter tidak valid." }, { status: 400 });
   }
 
-  const transactions = await getTransactions(userId, parsed.data);
+  const transactions = await getTransactions(userId, normalizeTransactionFilters(parsed.data));
   const csv = buildTransactionsCsv(transactions);
 
   return new NextResponse(csv, {

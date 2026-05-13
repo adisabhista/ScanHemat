@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 
 import { AppSidebar } from "@/components/app/AppSidebar";
 import { MobileNav } from "@/components/app/MobileNav";
+import { FloatingAssistantWidget } from "@/features/assistant/FloatingAssistantWidget";
 import { getCurrentSession } from "@/lib/auth";
 
 export default async function DashboardLayout({
@@ -22,6 +23,7 @@ export default async function DashboardLayout({
       <main className="px-4 py-6 lg:ml-64 lg:px-8">
         <div className="mx-auto max-w-7xl space-y-6">{children}</div>
       </main>
+      <FloatingAssistantWidget />
     </div>
   );
 }

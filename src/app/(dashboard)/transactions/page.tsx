@@ -4,6 +4,7 @@ import { PageHeader } from "@/components/app/PageHeader";
 import { getAvailableCategories } from "@/features/categories/queries";
 import { TransactionFilters } from "@/features/transactions/TransactionFilters";
 import { TransactionTable } from "@/features/transactions/TransactionTable";
+import { normalizeTransactionFilters, normalizeTransactionPeriod } from "@/features/transactions/period-filter";
 import { getTransactions } from "@/features/transactions/queries";
 import { requireUserId } from "@/lib/auth";
 import { NEW_TRANSACTION_ROUTE, SCAN_RECEIPT_ROUTE } from "@/lib/routes";
@@ -26,22 +27,26 @@ export default async function TransactionsPage({
   const params = await searchParams;
   const userId = await requireUserId();
   const now = new Date();
+  const requestedPeriod = normalizeTransactionPeriod(params.period);
   const parsedFilters = transactionFilterSchema.safeParse({
-    period: params.period || undefined,
-    month: params.month || now.getUTCMonth() + 1,
-    year: params.year || now.getUTCFullYear(),
-    startDate: params.startDate || undefined,
-    endDate: params.endDate || undefined,
+    period: requestedPeriod,
+    month: requestedPeriod === "month" ? params.month || now.getUTCMonth() + 1 : undefined,
+    year: requestedPeriod === "month" || requestedPeriod === "year" ? params.year || now.getUTCFullYear() : undefined,
+    startDate: requestedPeriod === "custom" ? params.startDate || undefined : undefined,
+    endDate: requestedPeriod === "custom" ? params.endDate || undefined : undefined,
     categoryId: params.categoryId || undefined
   });
-  const filters = parsedFilters.success
-    ? parsedFilters.data
-    : {
+  const filters = normalizeTransactionFilters(
+    parsedFilters.success
+      ? parsedFilters.data
+      : {
         period: "month" as const,
         month: now.getUTCMonth() + 1,
         year: now.getUTCFullYear(),
         categoryId: undefined
-      };
+      },
+    now
+  );
   const [categories, transactions] = await Promise.all([
     getAvailableCategories(userId),
     getTransactions(userId, filters)

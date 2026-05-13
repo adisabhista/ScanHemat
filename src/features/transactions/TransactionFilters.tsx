@@ -1,9 +1,16 @@
+"use client";
+
 import type { Category } from "@prisma/client";
+import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
-import type { TransactionPeriod } from "@/features/transactions/queries";
+import {
+  buildTransactionFilterSearchParams,
+  getVisiblePeriodControls,
+  type TransactionPeriod
+} from "@/features/transactions/period-filter";
 
 const months = [
   "Januari",
@@ -37,49 +44,59 @@ export function TransactionFilters({
   selectedEndDate?: string;
   selectedCategoryId?: string;
 }) {
-  const exportParams = new URLSearchParams({
-    period: selectedPeriod,
-    month: String(selectedMonth),
-    year: String(selectedYear)
-  });
-
-  if (selectedStartDate) {
-    exportParams.set("startDate", selectedStartDate);
-  }
-
-  if (selectedEndDate) {
-    exportParams.set("endDate", selectedEndDate);
-  }
-
-  if (selectedCategoryId) {
-    exportParams.set("categoryId", selectedCategoryId);
-  }
+  const [period, setPeriod] = useState<TransactionPeriod>(selectedPeriod);
+  const [month, setMonth] = useState(selectedMonth);
+  const [year, setYear] = useState(selectedYear);
+  const [startDate, setStartDate] = useState(selectedStartDate ?? "");
+  const [endDate, setEndDate] = useState(selectedEndDate ?? "");
+  const [categoryId, setCategoryId] = useState(selectedCategoryId ?? "");
+  const controls = getVisiblePeriodControls(period);
+  const exportParams = useMemo(
+    () =>
+      buildTransactionFilterSearchParams({
+        period,
+        month,
+        year,
+        startDate,
+        endDate,
+        categoryId
+      }),
+    [categoryId, endDate, month, period, startDate, year]
+  );
 
   return (
-    <form className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 lg:grid-cols-[1fr_1fr_1fr_1fr_1fr_auto_auto]" method="get">
-      <Select defaultValue={selectedPeriod} label="Periode" name="period">
+    <form className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 sm:grid-cols-2 lg:grid-cols-[repeat(auto-fit,minmax(160px,1fr))]" method="get">
+      <Select value={period} label="Periode" name="period" onChange={(event) => setPeriod(event.target.value as TransactionPeriod)}>
         <option value="month">Bulan Ini</option>
         <option value="year">Tahun Ini</option>
         <option value="all">Semua Waktu</option>
         <option value="custom">Rentang Kustom</option>
       </Select>
-      <Select defaultValue={selectedMonth} label="Bulan" name="month">
-        {months.map((month, index) => (
-          <option key={month} value={index + 1}>
-            {month}
-          </option>
-        ))}
-      </Select>
-      <Select defaultValue={selectedYear} label="Tahun" name="year">
-        {Array.from({ length: 6 }, (_, index) => selectedYear - 3 + index).map((year) => (
-          <option key={year} value={year}>
-            {year}
-          </option>
-        ))}
-      </Select>
-      <Input defaultValue={selectedStartDate ?? ""} label="Tanggal Mulai" name="startDate" type="date" />
-      <Input defaultValue={selectedEndDate ?? ""} label="Tanggal Akhir" name="endDate" type="date" />
-      <Select defaultValue={selectedCategoryId ?? ""} label="Kategori" name="categoryId">
+      {controls.showMonth ? (
+        <Select value={month} label="Bulan" name="month" onChange={(event) => setMonth(Number(event.target.value))}>
+          {months.map((monthName, index) => (
+            <option key={monthName} value={index + 1}>
+              {monthName}
+            </option>
+          ))}
+        </Select>
+      ) : null}
+      {controls.showYear ? (
+        <Select value={year} label="Tahun" name="year" onChange={(event) => setYear(Number(event.target.value))}>
+          {Array.from({ length: 6 }, (_, index) => year - 3 + index).map((yearOption) => (
+            <option key={yearOption} value={yearOption}>
+              {yearOption}
+            </option>
+          ))}
+        </Select>
+      ) : null}
+      {controls.showCustomRange ? (
+        <>
+          <Input value={startDate} label="Tanggal Mulai" name="startDate" type="date" onChange={(event) => setStartDate(event.target.value)} />
+          <Input value={endDate} label="Tanggal Akhir" name="endDate" type="date" onChange={(event) => setEndDate(event.target.value)} />
+        </>
+      ) : null}
+      <Select value={categoryId} label="Kategori" name="categoryId" onChange={(event) => setCategoryId(event.target.value)}>
         <option value="">Semua kategori</option>
         {categories.map((category) => (
           <option key={category.id} value={category.id}>

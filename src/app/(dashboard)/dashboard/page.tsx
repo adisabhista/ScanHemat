@@ -8,6 +8,7 @@ import { DashboardPeriodFilter } from "@/features/dashboard/DashboardPeriodFilte
 import { MonthlyBreakdownChart } from "@/features/dashboard/MonthlyBreakdownChart";
 import { RecentTransactions } from "@/features/dashboard/RecentTransactions";
 import { getBudgets } from "@/features/budgets/queries";
+import { normalizeTransactionFilters, normalizeTransactionPeriod } from "@/features/transactions/period-filter";
 import { getFilterLabel, getMonthRange, getTransactions, getYearRange } from "@/features/transactions/queries";
 import { requireUserId } from "@/lib/auth";
 import { formatCurrency } from "@/lib/format/currency";
@@ -34,22 +35,26 @@ export default async function DashboardPage({
   const now = new Date();
   const currentMonth = now.getUTCMonth() + 1;
   const currentYear = now.getUTCFullYear();
+  const requestedPeriod = normalizeTransactionPeriod(params.period);
   const parsedFilters = transactionFilterSchema.safeParse({
-    period: params.period || undefined,
-    month: params.month || currentMonth,
-    year: params.year || currentYear,
-    startDate: params.startDate || undefined,
-    endDate: params.endDate || undefined
+    period: requestedPeriod,
+    month: requestedPeriod === "month" ? params.month || currentMonth : undefined,
+    year: requestedPeriod === "month" || requestedPeriod === "year" ? params.year || currentYear : undefined,
+    startDate: requestedPeriod === "custom" ? params.startDate || undefined : undefined,
+    endDate: requestedPeriod === "custom" ? params.endDate || undefined : undefined
   });
-  const filters = parsedFilters.success
-    ? parsedFilters.data
-    : {
+  const filters = normalizeTransactionFilters(
+    parsedFilters.success
+      ? parsedFilters.data
+      : {
         period: "month" as const,
         month: currentMonth,
         year: currentYear,
         startDate: undefined,
         endDate: undefined
-      };
+      },
+    now
+  );
   const budgetMonth = filters.period === "month" ? filters.month ?? currentMonth : currentMonth;
   const budgetYear = filters.period === "month" ? filters.year ?? currentYear : currentYear;
   const { start, end } = getMonthRange(budgetYear, budgetMonth);
