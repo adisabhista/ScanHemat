@@ -2,8 +2,10 @@ import type { Category, Receipt, Transaction, TransactionItem } from "@prisma/cl
 import Link from "next/link";
 
 import { EmptyState } from "@/components/ui/EmptyState";
+import { TransactionSourceBadge } from "@/features/transactions/TransactionSourceBadge";
 import { formatCurrency } from "@/lib/format/currency";
 import { formatDate } from "@/lib/format/date";
+import { SCAN_RECEIPT_ROUTE } from "@/lib/routes";
 
 type TransactionWithRelations = Transaction & {
   category: Category;
@@ -18,7 +20,7 @@ export function TransactionTable({ transactions }: { transactions: TransactionWi
         title="Belum ada transaksi"
         description="Unggah struk pertama Anda untuk mulai mencatat pengeluaran"
         action={
-          <Link className="inline-flex rounded-md bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700" href="/scan">
+          <Link className="inline-flex rounded-md bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700" href={SCAN_RECEIPT_ROUTE}>
             Pindai Struk Baru
           </Link>
         }
@@ -33,8 +35,9 @@ export function TransactionTable({ transactions }: { transactions: TransactionWi
           <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-normal text-slate-500">
             <tr>
               <th className="px-4 py-3">Tanggal</th>
-              <th className="px-4 py-3">Merchant</th>
+              <th className="px-4 py-3">Toko</th>
               <th className="px-4 py-3">Kategori</th>
+              <th className="px-4 py-3">Sumber</th>
               <th className="px-4 py-3 text-right">Total</th>
               <th className="px-4 py-3">Aksi</th>
             </tr>
@@ -43,8 +46,11 @@ export function TransactionTable({ transactions }: { transactions: TransactionWi
             {transactions.map((transaction) => (
               <tr key={transaction.id}>
                 <td className="whitespace-nowrap px-4 py-3 text-slate-600">{formatDate(transaction.transactionDate)}</td>
-                <td className="px-4 py-3 font-medium text-slate-900">{transaction.merchant || "Tanpa merchant"}</td>
+                <td className="px-4 py-3 font-medium text-slate-900">{transaction.merchant || "Tanpa toko"}</td>
                 <td className="px-4 py-3 text-slate-600">{transaction.category.name}</td>
+                <td className="px-4 py-3">
+                  <TransactionSourceBadge source={transaction.source} />
+                </td>
                 <td className="whitespace-nowrap px-4 py-3 text-right font-semibold text-slate-900">
                   {formatCurrency(transaction.totalAmount.toString())}
                 </td>

@@ -11,7 +11,7 @@ export function BudgetProgressList({
   }[];
 }) {
   if (items.length === 0) {
-    return <p className="text-sm text-slate-500">Belum ada anggaran bulan ini.</p>;
+    return <p className="text-sm text-slate-500">Belum ada anggaran bulanan.</p>;
   }
 
   return (

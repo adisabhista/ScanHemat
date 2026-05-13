@@ -1,5 +1,3 @@
-import type { Category } from "@prisma/client";
-
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
@@ -20,43 +18,21 @@ const months = [
   "Desember"
 ];
 
-export function TransactionFilters({
-  categories,
+export function DashboardPeriodFilter({
   selectedPeriod,
   selectedMonth,
   selectedYear,
   selectedStartDate,
-  selectedEndDate,
-  selectedCategoryId
+  selectedEndDate
 }: {
-  categories: Category[];
   selectedPeriod: TransactionPeriod;
   selectedMonth: number;
   selectedYear: number;
   selectedStartDate?: string;
   selectedEndDate?: string;
-  selectedCategoryId?: string;
 }) {
-  const exportParams = new URLSearchParams({
-    period: selectedPeriod,
-    month: String(selectedMonth),
-    year: String(selectedYear)
-  });
-
-  if (selectedStartDate) {
-    exportParams.set("startDate", selectedStartDate);
-  }
-
-  if (selectedEndDate) {
-    exportParams.set("endDate", selectedEndDate);
-  }
-
-  if (selectedCategoryId) {
-    exportParams.set("categoryId", selectedCategoryId);
-  }
-
   return (
-    <form className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 lg:grid-cols-[1fr_1fr_1fr_1fr_1fr_auto_auto]" method="get">
+    <form className="grid gap-3 rounded-lg border border-slate-200 bg-white p-4 lg:grid-cols-[1fr_1fr_1fr_1fr_1fr_auto]" method="get">
       <Select defaultValue={selectedPeriod} label="Periode" name="period">
         <option value="month">Bulan Ini</option>
         <option value="year">Tahun Ini</option>
@@ -79,26 +55,10 @@ export function TransactionFilters({
       </Select>
       <Input defaultValue={selectedStartDate ?? ""} label="Tanggal Mulai" name="startDate" type="date" />
       <Input defaultValue={selectedEndDate ?? ""} label="Tanggal Akhir" name="endDate" type="date" />
-      <Select defaultValue={selectedCategoryId ?? ""} label="Kategori" name="categoryId">
-        <option value="">Semua kategori</option>
-        {categories.map((category) => (
-          <option key={category.id} value={category.id}>
-            {category.name}
-          </option>
-        ))}
-      </Select>
       <div className="flex items-end">
         <Button className="w-full" type="submit">
           Terapkan Filter
         </Button>
-      </div>
-      <div className="flex items-end">
-        <a
-          className="inline-flex min-h-10 w-full items-center justify-center rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
-          href={`/api/export/transactions?${exportParams.toString()}`}
-        >
-          Ekspor CSV
-        </a>
       </div>
     </form>
   );

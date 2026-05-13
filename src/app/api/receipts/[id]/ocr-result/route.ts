@@ -45,6 +45,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     return NextResponse.json({
       receiptId: updatedReceipt.id,
       filePath: updatedReceipt.filePath,
+      mimeType: updatedReceipt.mimeType,
       rawText: updatedReceipt.rawText ?? "",
       parsed: parsedReceipt
     });

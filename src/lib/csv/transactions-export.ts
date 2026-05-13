@@ -13,7 +13,7 @@ function escapeCsvCell(value: string) {
 }
 
 export function buildTransactionsCsv(transactions: ExportTransaction[]) {
-  const headers = ["tanggal", "merchant", "kategori", "total", "catatan"];
+  const headers = ["tanggal", "toko", "kategori", "total", "catatan"];
   const rows = transactions.map((transaction) => [
     formatDate(transaction.transactionDate),
     transaction.merchant ?? "",

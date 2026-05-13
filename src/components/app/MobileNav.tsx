@@ -4,9 +4,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 
+import { SCAN_RECEIPT_ROUTE } from "@/lib/routes";
+
 const navItems = [
   { href: "/dashboard", label: "Dasbor" },
-  { href: "/scan", label: "Pindai Struk" },
+  { href: SCAN_RECEIPT_ROUTE, label: "Pindai Struk" },
   { href: "/transactions", label: "Transaksi" },
   { href: "/budgets", label: "Anggaran" },
   { href: "/categories", label: "Kategori" },

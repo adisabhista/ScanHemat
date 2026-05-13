@@ -4,33 +4,55 @@ import { PageHeader } from "@/components/app/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { BudgetProgressList } from "@/features/dashboard/BudgetProgressList";
 import { CategoryChart } from "@/features/dashboard/CategoryChart";
+import { DashboardPeriodFilter } from "@/features/dashboard/DashboardPeriodFilter";
+import { MonthlyBreakdownChart } from "@/features/dashboard/MonthlyBreakdownChart";
 import { RecentTransactions } from "@/features/dashboard/RecentTransactions";
 import { getBudgets } from "@/features/budgets/queries";
-import { getMonthRange, getTransactions } from "@/features/transactions/queries";
+import { getFilterLabel, getMonthRange, getTransactions, getYearRange } from "@/features/transactions/queries";
 import { requireUserId } from "@/lib/auth";
 import { formatCurrency } from "@/lib/format/currency";
-import { prisma } from "@/lib/prisma";
+import { NEW_TRANSACTION_ROUTE, SCAN_RECEIPT_ROUTE } from "@/lib/routes";
+import { transactionFilterSchema } from "@/lib/validation/transaction";
 
-export default async function DashboardPage() {
+const monthShortLabels = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
+
+export default async function DashboardPage({
+  searchParams
+}: {
+  searchParams: { period?: string; month?: string; year?: string; startDate?: string; endDate?: string };
+}) {
   const userId = await requireUserId();
   const now = new Date();
-  const month = now.getUTCMonth() + 1;
-  const year = now.getUTCFullYear();
-  const { start, end } = getMonthRange(year, month);
+  const currentMonth = now.getUTCMonth() + 1;
+  const currentYear = now.getUTCFullYear();
+  const parsedFilters = transactionFilterSchema.safeParse({
+    period: searchParams.period || undefined,
+    month: searchParams.month || currentMonth,
+    year: searchParams.year || currentYear,
+    startDate: searchParams.startDate || undefined,
+    endDate: searchParams.endDate || undefined
+  });
+  const filters = parsedFilters.success
+    ? parsedFilters.data
+    : {
+        period: "month" as const,
+        month: currentMonth,
+        year: currentYear,
+        startDate: undefined,
+        endDate: undefined
+      };
+  const budgetMonth = filters.period === "month" ? filters.month ?? currentMonth : currentMonth;
+  const budgetYear = filters.period === "month" ? filters.year ?? currentYear : currentYear;
+  const { start, end } = getMonthRange(budgetYear, budgetMonth);
 
-  const [monthlyTransactions, recentTransactions, monthlyBudgets] = await Promise.all([
-    getTransactions(userId, { month, year }),
-    prisma.transaction.findMany({
-      where: { userId },
-      include: { category: true },
-      orderBy: { transactionDate: "desc" },
-      take: 5
-    }),
-    getBudgets(userId, year, month)
+  const [filteredTransactions, monthlyBudgets, budgetMonthTransactions] = await Promise.all([
+    getTransactions(userId, filters),
+    getBudgets(userId, budgetYear, budgetMonth),
+    getTransactions(userId, { period: "month", year: budgetYear, month: budgetMonth })
   ]);
 
-  const totalExpenses = monthlyTransactions.reduce((sum, transaction) => sum + Number(transaction.totalAmount), 0);
-  const categoryTotals = monthlyTransactions.reduce<Record<string, number>>((totals, transaction) => {
+  const totalExpenses = filteredTransactions.reduce((sum, transaction) => sum + Number(transaction.totalAmount), 0);
+  const categoryTotals = filteredTransactions.reduce<Record<string, number>>((totals, transaction) => {
     totals[transaction.category.name] = (totals[transaction.category.name] ?? 0) + Number(transaction.totalAmount);
     return totals;
   }, {});
@@ -39,29 +61,59 @@ export default async function DashboardPage() {
   const budgetItems = monthlyBudgets.map((budget) => ({
     categoryName: budget.category.name,
     budgetAmount: Number(budget.amount),
-    usedAmount: monthlyTransactions
+    usedAmount: budgetMonthTransactions
       .filter((transaction) => transaction.categoryId === budget.categoryId)
       .reduce((sum, transaction) => sum + Number(transaction.totalAmount), 0)
   }));
+  const recentTransactions = filteredTransactions.slice(0, 5);
+  const selectedYear = filters.year ?? currentYear;
+  const yearlyBreakdown =
+    filters.period === "year"
+      ? monthShortLabels.map((name, index) => {
+          const monthRange = getMonthRange(selectedYear, index + 1);
+          const total = filteredTransactions
+            .filter((transaction) => transaction.transactionDate >= monthRange.start && transaction.transactionDate < monthRange.end)
+            .reduce((sum, transaction) => sum + Number(transaction.totalAmount), 0);
+
+          return { name, total };
+        })
+      : [];
+  const periodLabel = getFilterLabel(filters, now);
+  const selectedDateRange = filters.period === "year" ? getYearRange(selectedYear) : filters.period === "month" ? getMonthRange(filters.year ?? currentYear, filters.month ?? currentMonth) : null;
 
   return (
     <>
       <PageHeader
         title="Dasbor"
-        description="Ringkasan pengeluaran, kategori, dan anggaran bulan ini."
+        description="Ringkasan pengeluaran, kategori, dan anggaran."
         action={
-          <Link className="inline-flex rounded-md bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700" href="/scan">
-            Pindai Struk Baru
-          </Link>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Link className="inline-flex min-h-10 items-center justify-center rounded-md bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700" href={SCAN_RECEIPT_ROUTE}>
+              Pindai Struk Baru
+            </Link>
+            <Link className="inline-flex min-h-10 items-center justify-center rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50" href={NEW_TRANSACTION_ROUTE}>
+              Tambah Manual
+            </Link>
+          </div>
         }
+      />
+
+      <DashboardPeriodFilter
+        selectedEndDate={filters.endDate}
+        selectedMonth={filters.month ?? currentMonth}
+        selectedPeriod={filters.period}
+        selectedStartDate={filters.startDate}
+        selectedYear={filters.year ?? currentYear}
       />
 
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
-          <p className="text-sm font-medium text-slate-500">Pengeluaran Bulan Ini</p>
+          <p className="text-sm font-medium text-slate-500">Total Pengeluaran</p>
           <p className="mt-3 text-3xl font-bold text-slate-950">{formatCurrency(totalExpenses)}</p>
           <p className="mt-2 text-xs text-slate-500">
-            {start.toLocaleDateString("id-ID")} - {new Date(end.getTime() - 1).toLocaleDateString("id-ID")}
+            {selectedDateRange
+              ? `${selectedDateRange.start.toLocaleDateString("id-ID")} - ${new Date(selectedDateRange.end.getTime() - 1).toLocaleDateString("id-ID")}`
+              : periodLabel}
           </p>
         </Card>
         <Card>
@@ -71,8 +123,8 @@ export default async function DashboardPage() {
         </Card>
         <Card>
           <p className="text-sm font-medium text-slate-500">Jumlah Transaksi</p>
-          <p className="mt-3 text-3xl font-bold text-slate-950">{monthlyTransactions.length}</p>
-          <p className="mt-2 text-sm text-slate-500">Transaksi bulan ini</p>
+          <p className="mt-3 text-3xl font-bold text-slate-950">{filteredTransactions.length}</p>
+          <p className="mt-2 text-sm text-slate-500">Transaksi pada periode ini</p>
         </Card>
       </div>
 
@@ -84,12 +136,24 @@ export default async function DashboardPage() {
           </div>
         </Card>
         <Card>
-          <h2 className="text-base font-semibold text-slate-950">Progress Anggaran</h2>
+          <h2 className="text-base font-semibold text-slate-950">Progres Anggaran Bulanan</h2>
+          <p className="mt-1 text-sm text-slate-500">
+            {start.toLocaleDateString("id-ID")} - {new Date(end.getTime() - 1).toLocaleDateString("id-ID")}
+          </p>
           <div className="mt-4">
             <BudgetProgressList items={budgetItems} />
           </div>
         </Card>
       </div>
+
+      {filters.period === "year" ? (
+        <Card>
+          <h2 className="text-base font-semibold text-slate-950">Rincian Bulanan</h2>
+          <div className="mt-4">
+            <MonthlyBreakdownChart data={yearlyBreakdown} />
+          </div>
+        </Card>
+      ) : null}
 
       <Card>
         <div className="mb-2 flex items-center justify-between">

@@ -1,47 +1,28 @@
 "use client";
 
-import type { Category, TransactionItem } from "@prisma/client";
+import type { Category } from "@prisma/client";
 import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
-import { deleteTransactionAction, updateTransactionAction } from "@/features/transactions/actions";
-import { TransactionSourceBadge } from "@/features/transactions/TransactionSourceBadge";
-import { toInputDate } from "@/lib/format/date";
+import { createTransactionAction } from "@/features/transactions/actions";
 
-type EditableItem = {
+type ManualItem = {
   name: string;
   quantity?: string;
   unitPrice?: string;
   totalPrice?: string;
 };
 
-export function TransactionEditForm({
-  transaction,
-  categories
-}: {
-  transaction: {
-    id: string;
-    merchant: string | null;
-    transactionDate: Date;
-    categoryId: string;
-    totalAmount: { toString(): string };
-    notes: string | null;
-    source: "MANUAL" | "RECEIPT_OCR" | "PDF_OCR";
-    items: TransactionItem[];
-  };
-  categories: Category[];
-}) {
-  const [items, setItems] = useState<EditableItem[]>(
-    transaction.items.map((item) => ({
-      name: item.name,
-      quantity: item.quantity?.toString(),
-      unitPrice: item.unitPrice?.toString(),
-      totalPrice: item.totalPrice?.toString()
-    }))
-  );
+function getTodayInputValue() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+export function ManualTransactionForm({ categories }: { categories: Category[] }) {
+  const defaultCategory = categories.find((category) => category.name === "Lainnya") ?? categories[0];
+  const [items, setItems] = useState<ManualItem[]>([]);
   const serializedItems = useMemo(
     () =>
       JSON.stringify(
@@ -56,42 +37,36 @@ export function TransactionEditForm({
       ),
     [items]
   );
-  const updateAction = updateTransactionAction.bind(null, transaction.id);
-  const deleteAction = deleteTransactionAction.bind(null, transaction.id);
 
-  function updateItem(index: number, field: keyof EditableItem, value: string) {
+  function updateItem(index: number, field: keyof ManualItem, value: string) {
     setItems((current) => current.map((item, itemIndex) => (itemIndex === index ? { ...item, [field]: value } : item)));
   }
 
   return (
     <Card>
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <h2 className="text-base font-semibold text-slate-950">Detail Transaksi</h2>
-        <TransactionSourceBadge source={transaction.source} />
-      </div>
-      <form action={updateAction} className="grid gap-4">
+      <form action={createTransactionAction} className="grid gap-4">
         <input name="items" type="hidden" value={serializedItems} />
-        <Input defaultValue={transaction.merchant ?? ""} label="Merchant / Toko" name="merchant" />
-        <Input defaultValue={toInputDate(transaction.transactionDate)} label="Tanggal" name="transactionDate" required type="date" />
-        <Input defaultValue={transaction.totalAmount.toString()} label="Total" min="0" name="totalAmount" required step="1" type="number" />
-        <Select defaultValue={transaction.categoryId} label="Kategori" name="categoryId" required>
+        <Input label="Merchant / Toko" name="merchant" placeholder="Nama toko" />
+        <Input defaultValue={getTodayInputValue()} label="Tanggal" name="transactionDate" required type="date" />
+        <Select defaultValue={defaultCategory?.id} label="Kategori" name="categoryId" required>
           {categories.map((category) => (
             <option key={category.id} value={category.id}>
               {category.name}
             </option>
           ))}
         </Select>
+        <Input label="Total" min="0" name="totalAmount" required step="1" type="number" />
         <label className="grid gap-1.5 text-sm font-medium text-slate-700">
           <span>Catatan</span>
           <textarea
             className="min-h-24 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
-            defaultValue={transaction.notes ?? ""}
             name="notes"
+            placeholder="Catatan tambahan"
           />
         </label>
         <div className="grid gap-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-slate-900">Item</h3>
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-sm font-semibold text-slate-900">Item opsional</h2>
             <button
               className="text-sm font-semibold text-brand-700"
               onClick={() => setItems((current) => [...current, { name: "" }])}
@@ -100,6 +75,7 @@ export function TransactionEditForm({
               Tambah item
             </button>
           </div>
+          {items.length === 0 ? <p className="text-sm text-slate-500">Belum ada item.</p> : null}
           {items.map((item, index) => (
             <div className="grid gap-2 rounded-md border border-slate-200 p-3 sm:grid-cols-[1fr_120px_120px_auto]" key={index}>
               <Input value={item.name} onChange={(event) => updateItem(index, "name", event.target.value)} placeholder="Nama item" />
@@ -129,12 +105,7 @@ export function TransactionEditForm({
             </div>
           ))}
         </div>
-        <div className="flex flex-col gap-3 sm:flex-row">
-          <Button type="submit">Simpan</Button>
-          <Button formAction={deleteAction} type="submit" variant="danger">
-            Hapus
-          </Button>
-        </div>
+        <Button type="submit">Simpan</Button>
       </form>
     </Card>
   );

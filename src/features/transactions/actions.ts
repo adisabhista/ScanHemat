@@ -7,6 +7,7 @@ import { redirect } from "next/navigation";
 import { ensureCategoryAccess } from "@/features/categories/queries";
 import { requireUserId } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { DASHBOARD_ROUTE, NEW_TRANSACTION_ROUTE, SCAN_RECEIPT_ROUTE, TRANSACTIONS_ROUTE } from "@/lib/routes";
 import { transactionSchema } from "@/lib/validation/transaction";
 
 function parseItems(formData: FormData) {
@@ -38,12 +39,14 @@ function parseTransactionForm(formData: FormData) {
 export async function createTransactionAction(formData: FormData) {
   const userId = await requireUserId();
   const parsed = parseTransactionForm(formData);
+  const errorPath = formData.get("receiptId") ? SCAN_RECEIPT_ROUTE : NEW_TRANSACTION_ROUTE;
 
   if (!parsed.success) {
-    redirect(`/scan?error=${encodeURIComponent(parsed.error.errors[0]?.message ?? "Gagal menyimpan transaksi. Silakan coba lagi.")}`);
+    redirect(`${errorPath}?error=${encodeURIComponent(parsed.error.errors[0]?.message ?? "Gagal menyimpan transaksi. Silakan coba lagi.")}`);
   }
 
   await ensureCategoryAccess(userId, parsed.data.categoryId);
+  let transactionSource: TransactionSource = TransactionSource.MANUAL;
 
   if (parsed.data.receiptId) {
     const receipt = await prisma.receipt.findFirst({
@@ -54,8 +57,10 @@ export async function createTransactionAction(formData: FormData) {
     });
 
     if (!receipt) {
-      redirect(`/scan?error=${encodeURIComponent("Gagal menyimpan transaksi. Silakan coba lagi.")}`);
+      redirect(`${SCAN_RECEIPT_ROUTE}?error=${encodeURIComponent("Gagal menyimpan transaksi. Silakan coba lagi.")}`);
     }
+
+    transactionSource = receipt.mimeType === "application/pdf" ? TransactionSource.PDF_OCR : TransactionSource.RECEIPT_OCR;
   }
 
   await prisma.transaction.create({
@@ -67,7 +72,7 @@ export async function createTransactionAction(formData: FormData) {
       totalAmount: new Prisma.Decimal(parsed.data.totalAmount),
       categoryId: parsed.data.categoryId,
       notes: parsed.data.notes || null,
-      source: parsed.data.receiptId ? TransactionSource.RECEIPT_OCR : TransactionSource.MANUAL,
+      source: transactionSource,
       items: {
         create:
           parsed.data.items?.map((item) => ({
@@ -87,9 +92,9 @@ export async function createTransactionAction(formData: FormData) {
     });
   }
 
-  revalidatePath("/dashboard");
-  revalidatePath("/transactions");
-  redirect("/transactions");
+  revalidatePath(DASHBOARD_ROUTE);
+  revalidatePath(TRANSACTIONS_ROUTE);
+  redirect(TRANSACTIONS_ROUTE);
 }
 
 export async function updateTransactionAction(id: string, formData: FormData) {
@@ -135,8 +140,8 @@ export async function updateTransactionAction(id: string, formData: FormData) {
     })
   ]);
 
-  revalidatePath("/dashboard");
-  revalidatePath("/transactions");
+  revalidatePath(DASHBOARD_ROUTE);
+  revalidatePath(TRANSACTIONS_ROUTE);
   redirect(`/transactions/${id}`);
 }
 
@@ -152,7 +157,7 @@ export async function deleteTransactionAction(id: string) {
     });
   }
 
-  revalidatePath("/dashboard");
-  revalidatePath("/transactions");
-  redirect("/transactions");
+  revalidatePath(DASHBOARD_ROUTE);
+  revalidatePath(TRANSACTIONS_ROUTE);
+  redirect(TRANSACTIONS_ROUTE);
 }

@@ -18,7 +18,7 @@ export function RecentTransactions({ transactions }: { transactions: RecentTrans
       {transactions.map((transaction) => (
         <Link className="flex items-center justify-between gap-4 py-3" href={`/transactions/${transaction.id}`} key={transaction.id}>
           <div>
-            <p className="font-medium text-slate-950">{transaction.merchant || "Tanpa merchant"}</p>
+            <p className="font-medium text-slate-950">{transaction.merchant || "Tanpa toko"}</p>
             <p className="text-sm text-slate-500">
               {formatDate(transaction.transactionDate)} - {transaction.category.name}
             </p>

@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const allowedReceiptMimeTypes = ["image/jpeg", "image/png", "image/webp"];
+export const allowedReceiptMimeTypes = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
 
 export const receiptUploadSchema = z.object({
   file: z
@@ -8,7 +8,7 @@ export const receiptUploadSchema = z.object({
     .refine((file) => file.size > 0, "Struk wajib diunggah.")
     .refine(
       (file) => allowedReceiptMimeTypes.includes(file.type),
-      "Format gambar harus JPG, PNG, atau WebP."
+      "Format yang didukung: JPG, PNG, WEBP, atau PDF."
     )
 });
 

@@ -51,7 +51,7 @@ export function TransactionReviewForm({
       <form action={createTransactionAction} className="mt-5 grid gap-4">
         <input name="receiptId" type="hidden" value={receiptId} />
         <input name="items" type="hidden" value={serializedItems} />
-        <Input defaultValue={parsedReceipt.merchant ?? ""} label="Merchant" name="merchant" placeholder="Nama toko" />
+        <Input defaultValue={parsedReceipt.merchant ?? ""} label="Merchant / Toko" name="merchant" placeholder="Nama toko" />
         <Input
           defaultValue={parsedReceipt.transactionDate ?? getTodayInputValue()}
           label="Tanggal"

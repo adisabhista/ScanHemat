@@ -160,4 +160,5 @@ enum ReceiptStatus {
 enum TransactionSource {
   MANUAL
   RECEIPT_OCR
+  PDF_OCR
 }

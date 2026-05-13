@@ -17,7 +17,7 @@ export async function POST(request: Request) {
     }
 
     if (parsedFile.data.file.size > getMaxReceiptUploadBytes()) {
-      return NextResponse.json({ error: "Ukuran gambar terlalu besar." }, { status: 400 });
+      return NextResponse.json({ error: "Ukuran file terlalu besar." }, { status: 400 });
     }
 
     const storedFile = await receiptStorage.saveReceipt(parsedFile.data.file, userId);

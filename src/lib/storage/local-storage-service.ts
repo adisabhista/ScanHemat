@@ -7,7 +7,8 @@ import type { StorageService, StoredFile } from "@/lib/storage/storage-service";
 const extensionByMimeType: Record<string, string> = {
   "image/jpeg": "jpg",
   "image/png": "png",
-  "image/webp": "webp"
+  "image/webp": "webp",
+  "application/pdf": "pdf"
 };
 
 const uploadRoot = path.join(process.cwd(), "public", "uploads", "receipts");

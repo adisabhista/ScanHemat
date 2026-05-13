@@ -9,8 +9,11 @@ export async function GET(request: Request) {
   const userId = await requireUserId();
   const url = new URL(request.url);
   const parsed = transactionFilterSchema.safeParse({
+    period: url.searchParams.get("period") || undefined,
     month: url.searchParams.get("month") || undefined,
     year: url.searchParams.get("year") || undefined,
+    startDate: url.searchParams.get("startDate") || undefined,
+    endDate: url.searchParams.get("endDate") || undefined,
     categoryId: url.searchParams.get("categoryId") || undefined
   });
 
