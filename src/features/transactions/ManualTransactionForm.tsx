@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { createTransactionAction } from "@/features/transactions/actions";
+import { formatIndonesianDateLabel } from "@/lib/format/date";
 
 type ManualItem = {
   name: string;
@@ -23,6 +24,7 @@ function getTodayInputValue() {
 export function ManualTransactionForm({ categories }: { categories: Category[] }) {
   const defaultCategory = categories.find((category) => category.name === "Lainnya") ?? categories[0];
   const [items, setItems] = useState<ManualItem[]>([]);
+  const [transactionDate, setTransactionDate] = useState(getTodayInputValue());
   const serializedItems = useMemo(
     () =>
       JSON.stringify(
@@ -42,12 +44,26 @@ export function ManualTransactionForm({ categories }: { categories: Category[] }
     setItems((current) => current.map((item, itemIndex) => (itemIndex === index ? { ...item, [field]: value } : item)));
   }
 
+  const datePreview = formatIndonesianDateLabel(transactionDate);
+
   return (
     <Card>
       <form action={createTransactionAction} className="grid gap-4">
         <input name="items" type="hidden" value={serializedItems} />
         <Input label="Merchant / Toko" name="merchant" placeholder="Nama toko" />
-        <Input defaultValue={getTodayInputValue()} label="Tanggal" name="transactionDate" required type="date" />
+        <div>
+          <Input
+            value={transactionDate}
+            onChange={(e) => setTransactionDate(e.target.value)}
+            label="Tanggal"
+            name="transactionDate"
+            required
+            type="date"
+          />
+          {datePreview ? (
+            <p className="mt-1 text-xs text-slate-500">Tanggal terpilih: {datePreview}</p>
+          ) : null}
+        </div>
         <Select defaultValue={defaultCategory?.id} label="Kategori" name="categoryId" required>
           {categories.map((category) => (
             <option key={category.id} value={category.id}>

@@ -9,11 +9,16 @@ import { getCurrentSession } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
+type RegisterPageSearchParams = Promise<{
+  error?: string;
+}>;
+
 export default async function RegisterPage({
   searchParams
 }: {
-  searchParams: { error?: string };
+  searchParams: RegisterPageSearchParams;
 }) {
+  const params = await searchParams;
   const session = await getCurrentSession();
 
   if (session?.user) {
@@ -28,7 +33,7 @@ export default async function RegisterPage({
           <h1 className="mt-2 text-2xl font-bold text-slate-950">Daftar</h1>
           <p className="mt-1 text-sm text-slate-500">Buat akun untuk mulai mencatat pengeluaran.</p>
         </div>
-        {searchParams.error ? <p className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-700">{searchParams.error}</p> : null}
+        {params.error ? <p className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-700">{params.error}</p> : null}
         <form action={registerUserAction} className="grid gap-4">
           <Input autoComplete="name" label="Nama" name="name" required />
           <Input autoComplete="email" label="Email" name="email" required type="email" />

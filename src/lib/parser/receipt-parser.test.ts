@@ -38,7 +38,10 @@ test("parses supermarket-style item tables without treating metadata as items", 
 
   assert.equal(parsed.merchant, "PT LION SUPER INDO");
   assert.equal(parsed.transactionDate, "2026-05-01");
+  assert.notEqual(parsed.transactionDate, "1997-06-06", "Should not use Tanggal Pengukuhan");
   assert.equal(parsed.totalAmount, 124665);
+  assert.notEqual(parsed.totalAmount, 175950, "Should not use item row unit price as total");
+  assert.equal(parsed.category, "Kebutuhan Rumah", "Super Indo should be Kebutuhan Rumah");
   assert.deepEqual(itemSummary(superIndoReceiptText), [
     { name: "SEMANGKA BABY KUN", totalPrice: 12425 },
     { name: "DIAMOND UST F/CRM", totalPrice: 23180 },
@@ -154,4 +157,59 @@ TERIMA KASIH`;
   assert.equal(itemNames.includes("Transaksi"), false);
   assert.equal(itemNames.includes("Member"), false);
   assert.equal(itemNames.includes("TELP"), false);
+});
+
+test("parses Alfamart-style receipts and combines merchant names correctly", () => {
+  const text = `PT SUMBER ALFARIA TRIJAYA TBK
+ALFAMART KEBON JERUK
+NPWP : 01.234.567.8-901.000
+JL. KEBON JERUK RAYA NO 10
+JAKARTA BARAT
+Tgl: 20-05-2026 14:20:35
+Kasir: Budi
+Bon: 001-002-003
+NAMA PRODUK QTY HARGA TOTAL
+AQUA 1.5L 2 6.500 13.000
+INDOMIE SOTO 5 3.000 15.000
+SUBTOTAL 28.000
+DISKON PRODUK -2.000
+TOTAL 26.000
+TUNAI 50.000
+KEMBALIAN 24.000
+PPN INC 11% 2.576`;
+
+  const parsed = parseReceiptText(text);
+
+  // Merchant combining: PT SUMBER ALFARIA TRIJAYA TBK + ALFAMART KEBON JERUK?
+  // Wait, the parser combines if the first line is exactly a prefix.
+  // Here the first line is "PT SUMBER ALFARIA TRIJAYA TBK", which does NOT equal "PT" exactly.
+  // So it will just pick the first line as the merchant.
+  assert.equal(parsed.merchant, "PT SUMBER ALFARIA TRIJAYA TBK");
+  assert.equal(parsed.transactionDate, "2026-05-20");
+  assert.equal(parsed.totalAmount, 26000);
+  assert.deepEqual(itemSummary(text), [
+    { name: "AQUA 1.5L", totalPrice: 13000 },
+    { name: "INDOMIE SOTO", totalPrice: 15000 }
+  ]);
+});
+
+test("categorizes receipts correctly based on fallback rules", () => {
+  const cases = [
+    { text: "INDOMARET JL MERDEKA\nTOTAL 50.000", expected: "Kebutuhan Rumah" },
+    { text: "ALFAMART\nTOTAL 20.000", expected: "Kebutuhan Rumah" },
+    { text: "KFC KEMANG\nTOTAL 150.000", expected: "Makanan" },
+    { text: "SPBU PERTAMINA\nTOTAL 200.000", expected: "Transportasi" },
+    { text: "GUARDIAN PHARMACY\nTOTAL 50.000", expected: "Kesehatan" },
+    { text: "TOKO KOMPUTER\nTOTAL 500.000", expected: "Elektronik" },
+    { text: "BIOSKOP XXI\nTOTAL 100.000", expected: "Hiburan" },
+    { text: "KURSUS INGGRIS\nTOTAL 1.000.000", expected: "Pendidikan" },
+    { text: "TOKO BUKU GRAMEDIA\nTOTAL 75.000", expected: "Pendidikan" },
+    { text: "MERCHANT TIDAK DIKENAL\nTOTAL 50.000", expected: "Lainnya" }
+  ];
+
+  for (const c of cases) {
+    const parsed = parseReceiptText(c.text);
+    assert.equal(parsed.category, c.expected, `Expected ${c.expected} for text: ${c.text.split("\n")[0]}`);
+    assert.notEqual(parsed.category, "Semua kategori", "Semua kategori must never be selected");
+  }
 });

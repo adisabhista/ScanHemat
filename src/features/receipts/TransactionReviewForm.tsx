@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { createTransactionAction } from "@/features/transactions/actions";
+import { formatIndonesianDateLabel } from "@/lib/format/date";
 import type { ParsedReceiptItem, ParsedReceipt } from "@/lib/parser/receipt-parser";
 
 type CategoryOption = {
@@ -29,6 +30,7 @@ export function TransactionReviewForm({
 }) {
   const defaultCategory = categories.find((category) => category.name === "Lainnya") ?? categories[0];
   const [items, setItems] = useState<ParsedReceiptItem[]>(parsedReceipt.items ?? []);
+  const [transactionDate, setTransactionDate] = useState(parsedReceipt.transactionDate ?? getTodayInputValue());
   const serializedItems = useMemo(() => JSON.stringify(items.filter((item) => item.name.trim())), [items]);
 
   function updateItem(index: number, field: keyof ParsedReceiptItem, value: string) {
@@ -44,21 +46,46 @@ export function TransactionReviewForm({
     );
   }
 
+  const datePreview = formatIndonesianDateLabel(transactionDate);
+
   return (
     <Card>
       <h2 className="text-base font-semibold text-slate-950">Periksa Data Transaksi</h2>
       <p className="mt-1 text-sm text-slate-500">Ubah hasil pindai sebelum menyimpan transaksi.</p>
+      
+      {parsedReceipt.warnings && parsedReceipt.warnings.length > 0 && (
+        <div className="mt-4 rounded-md bg-amber-50 p-4 border border-amber-200">
+          <div className="flex">
+            <div className="ml-3">
+              <h3 className="text-sm font-medium text-amber-800">Perhatian</h3>
+              <div className="mt-2 text-sm text-amber-700">
+                <ul className="list-disc space-y-1 pl-5">
+                  {parsedReceipt.warnings.map((warning, idx) => (
+                    <li key={idx}>{warning}</li>
+                  ))}
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
       <form action={createTransactionAction} className="mt-5 grid gap-4">
         <input name="receiptId" type="hidden" value={receiptId} />
         <input name="items" type="hidden" value={serializedItems} />
         <Input defaultValue={parsedReceipt.merchant ?? ""} label="Merchant / Toko" name="merchant" placeholder="Nama toko" />
-        <Input
-          defaultValue={parsedReceipt.transactionDate ?? getTodayInputValue()}
-          label="Tanggal"
-          name="transactionDate"
-          required
-          type="date"
-        />
+        <div>
+          <Input
+            value={transactionDate}
+            onChange={(e) => setTransactionDate(e.target.value)}
+            label="Tanggal"
+            name="transactionDate"
+            required
+            type="date"
+          />
+          {datePreview ? (
+            <p className="mt-1 text-xs text-slate-500">Tanggal terpilih: {datePreview}</p>
+          ) : null}
+        </div>
         <Input
           defaultValue={parsedReceipt.totalAmount ?? ""}
           label="Total"
@@ -68,7 +95,7 @@ export function TransactionReviewForm({
           step="1"
           type="number"
         />
-        <Select defaultValue={defaultCategory?.id} label="Kategori" name="categoryId" required>
+        <Select defaultValue={parsedReceipt.categoryId ?? defaultCategory?.id} label="Kategori" name="categoryId" required>
           {categories.map((category) => (
             <option key={category.id} value={category.id}>
               {category.name}

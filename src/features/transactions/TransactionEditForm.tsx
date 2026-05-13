@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { deleteTransactionAction, updateTransactionAction } from "@/features/transactions/actions";
 import { TransactionSourceBadge } from "@/features/transactions/TransactionSourceBadge";
-import { toInputDate } from "@/lib/format/date";
+import { toInputDate, formatIndonesianDateLabel } from "@/lib/format/date";
 
 type EditableItem = {
   name: string;
@@ -42,6 +42,7 @@ export function TransactionEditForm({
       totalPrice: item.totalPrice?.toString()
     }))
   );
+  const [transactionDate, setTransactionDate] = useState(toInputDate(transaction.transactionDate));
   const serializedItems = useMemo(
     () =>
       JSON.stringify(
@@ -63,6 +64,8 @@ export function TransactionEditForm({
     setItems((current) => current.map((item, itemIndex) => (itemIndex === index ? { ...item, [field]: value } : item)));
   }
 
+  const datePreview = formatIndonesianDateLabel(transactionDate);
+
   return (
     <Card>
       <div className="mb-4 flex items-center justify-between gap-3">
@@ -72,7 +75,19 @@ export function TransactionEditForm({
       <form action={updateAction} className="grid gap-4">
         <input name="items" type="hidden" value={serializedItems} />
         <Input defaultValue={transaction.merchant ?? ""} label="Merchant / Toko" name="merchant" />
-        <Input defaultValue={toInputDate(transaction.transactionDate)} label="Tanggal" name="transactionDate" required type="date" />
+        <div>
+          <Input
+            value={transactionDate}
+            onChange={(e) => setTransactionDate(e.target.value)}
+            label="Tanggal"
+            name="transactionDate"
+            required
+            type="date"
+          />
+          {datePreview ? (
+            <p className="mt-1 text-xs text-slate-500">Tanggal terpilih: {datePreview}</p>
+          ) : null}
+        </div>
         <Input defaultValue={transaction.totalAmount.toString()} label="Total" min="0" name="totalAmount" required step="1" type="number" />
         <Select defaultValue={transaction.categoryId} label="Kategori" name="categoryId" required>
           {categories.map((category) => (

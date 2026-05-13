@@ -6,11 +6,16 @@ import { ManualTransactionForm } from "@/features/transactions/ManualTransaction
 import { requireUserId } from "@/lib/auth";
 import { SCAN_RECEIPT_ROUTE } from "@/lib/routes";
 
+type NewTransactionPageSearchParams = Promise<{
+  error?: string;
+}>;
+
 export default async function NewTransactionPage({
   searchParams
 }: {
-  searchParams: { error?: string };
+  searchParams: NewTransactionPageSearchParams;
 }) {
+  const params = await searchParams;
   const userId = await requireUserId();
   const categories = await getAvailableCategories(userId);
 
@@ -25,7 +30,7 @@ export default async function NewTransactionPage({
           </Link>
         }
       />
-      {searchParams.error ? <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">{searchParams.error}</p> : null}
+      {params.error ? <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">{params.error}</p> : null}
       <ManualTransactionForm categories={categories} />
     </>
   );

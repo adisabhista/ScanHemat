@@ -9,20 +9,30 @@ import { requireUserId } from "@/lib/auth";
 import { NEW_TRANSACTION_ROUTE, SCAN_RECEIPT_ROUTE } from "@/lib/routes";
 import { transactionFilterSchema } from "@/lib/validation/transaction";
 
+type TransactionsPageSearchParams = Promise<{
+  period?: string;
+  month?: string;
+  year?: string;
+  startDate?: string;
+  endDate?: string;
+  categoryId?: string;
+}>;
+
 export default async function TransactionsPage({
   searchParams
 }: {
-  searchParams: { period?: string; month?: string; year?: string; startDate?: string; endDate?: string; categoryId?: string };
+  searchParams: TransactionsPageSearchParams;
 }) {
+  const params = await searchParams;
   const userId = await requireUserId();
   const now = new Date();
   const parsedFilters = transactionFilterSchema.safeParse({
-    period: searchParams.period || undefined,
-    month: searchParams.month || now.getUTCMonth() + 1,
-    year: searchParams.year || now.getUTCFullYear(),
-    startDate: searchParams.startDate || undefined,
-    endDate: searchParams.endDate || undefined,
-    categoryId: searchParams.categoryId || undefined
+    period: params.period || undefined,
+    month: params.month || now.getUTCMonth() + 1,
+    year: params.year || now.getUTCFullYear(),
+    startDate: params.startDate || undefined,
+    endDate: params.endDate || undefined,
+    categoryId: params.categoryId || undefined
   });
   const filters = parsedFilters.success
     ? parsedFilters.data

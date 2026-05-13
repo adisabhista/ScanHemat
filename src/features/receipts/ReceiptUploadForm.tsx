@@ -19,11 +19,43 @@ type UploadResult = {
   mimeType: string;
   rawText: string;
   parsed: ParsedReceipt;
+  ocr?: {
+    provider: string;
+    confidence?: number;
+    pages: number;
+  };
 };
 
-type OcrStage = "idle" | "uploading" | "processing" | "completed" | "failed";
+type UploadErrorResult = {
+  error?: string;
+  debug?: {
+    provider?: string;
+    code?: string;
+    message?: string;
+    missingEnvKeys?: string[];
+    presentEnvKeys?: string[];
+    errorName?: string;
+    googleCode?: number;
+    googleDetails?: string;
+    googleReason?: string;
+    googleMetadata?: Record<string, unknown>;
+    reason?: string;
+    credentialFilePresent?: boolean;
+    credentialFileReadable?: boolean;
+    credentialClientEmail?: string;
+    credentialProjectId?: string;
+    credentialType?: string;
+    credentialError?: string;
+    configuredProjectId?: string;
+    projectMismatch?: boolean;
+    processorName?: string;
+    deepError?: Record<string, unknown>;
+  };
+};
 
-const genericOcrMessage = "Gagal membaca struk. Coba unggah file lain atau gunakan gambar yang lebih jelas.";
+type OcrStage = "idle" | "uploading" | "ocr" | "processing" | "completed" | "failed";
+
+const genericOcrMessage = "Gagal membaca struk dengan Google OCR.";
 const missingFileMessage = "Pilih file struk terlebih dahulu.";
 const unsupportedFileMessage = "Format file tidak didukung. Gunakan JPG, PNG, WEBP, atau PDF.";
 const allowedReceiptMimeTypes = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
@@ -40,7 +72,8 @@ const TransactionReviewForm = dynamic(
 const stageLabels: Record<OcrStage, string> = {
   idle: "",
   uploading: "Mengunggah struk...",
-  processing: "Membaca struk di server...",
+  ocr: "Membaca struk dengan Google OCR...",
+  processing: "Memproses hasil...",
   completed: "Selesai membaca struk",
   failed: ""
 };
@@ -168,21 +201,27 @@ export function ReceiptUploadForm({ categories }: { categories: CategoryOption[]
     try {
       const formData = new FormData();
       formData.append("file", file);
-      setStage("processing");
-      setProgress(70);
+      setStage("ocr");
+      setProgress(55);
 
       const response = await fetch("/api/receipts/upload", {
         method: "POST",
         body: formData,
         signal: controller.signal
       });
-      const payload = (await response.json()) as UploadResult | { error?: string };
+      const payload = (await response.json()) as UploadResult | UploadErrorResult;
 
       if (!response.ok) {
+        if (isDevelopment && "debug" in payload && payload.debug) {
+          console.error("[OCR] Backend debug", payload.debug);
+        }
+
         throw new Error("error" in payload && payload.error ? payload.error : genericOcrMessage);
       }
 
       const uploadedResult = payload as UploadResult;
+      setStage("processing");
+      setProgress(90);
       setResult(uploadedResult);
       setLastAction("Formulir tinjauan ditampilkan");
       setStage("completed");

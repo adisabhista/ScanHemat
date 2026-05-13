@@ -16,21 +16,30 @@ import { transactionFilterSchema } from "@/lib/validation/transaction";
 
 const monthShortLabels = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
 
+type DashboardPageSearchParams = Promise<{
+  period?: string;
+  month?: string;
+  year?: string;
+  startDate?: string;
+  endDate?: string;
+}>;
+
 export default async function DashboardPage({
   searchParams
 }: {
-  searchParams: { period?: string; month?: string; year?: string; startDate?: string; endDate?: string };
+  searchParams: DashboardPageSearchParams;
 }) {
+  const params = await searchParams;
   const userId = await requireUserId();
   const now = new Date();
   const currentMonth = now.getUTCMonth() + 1;
   const currentYear = now.getUTCFullYear();
   const parsedFilters = transactionFilterSchema.safeParse({
-    period: searchParams.period || undefined,
-    month: searchParams.month || currentMonth,
-    year: searchParams.year || currentYear,
-    startDate: searchParams.startDate || undefined,
-    endDate: searchParams.endDate || undefined
+    period: params.period || undefined,
+    month: params.month || currentMonth,
+    year: params.year || currentYear,
+    startDate: params.startDate || undefined,
+    endDate: params.endDate || undefined
   });
   const filters = parsedFilters.success
     ? parsedFilters.data

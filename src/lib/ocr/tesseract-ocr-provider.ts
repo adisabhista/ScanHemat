@@ -1,6 +1,6 @@
 import { createWorker } from "tesseract.js";
 
-import type { OcrInput, OcrProvider, OcrResult } from "@/lib/ocr/ocr-provider";
+import { OcrProcessingError, type OcrInput, type OcrProvider, type OcrResult } from "@/lib/ocr/types";
 
 const supportedImageMimeTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
 
@@ -9,7 +9,12 @@ export class TesseractOcrProvider implements OcrProvider {
 
   async extractText(input: OcrInput): Promise<OcrResult> {
     if (!supportedImageMimeTypes.has(input.mimeType)) {
-      throw new Error("Tesseract OCR fallback only supports image receipts.");
+      throw new OcrProcessingError({
+        code: "unsupported-mime-type",
+        message: "Tesseract OCR fallback only supports image receipts.",
+        userMessage: "Format file belum didukung oleh Google OCR.",
+        statusCode: 400
+      });
     }
 
     const worker = await createWorker("eng");
@@ -22,7 +27,10 @@ export class TesseractOcrProvider implements OcrProvider {
       const recognition = await worker.recognize(input.content);
 
       return {
-        rawText: recognition.data.text.trim()
+        rawText: recognition.data.text.trim(),
+        provider: this.name,
+        confidence: recognition.data.confidence,
+        pages: 1
       };
     } finally {
       await worker.terminate();
