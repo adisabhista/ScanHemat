@@ -1,12 +1,11 @@
 "use client";
 
+import dynamic from "next/dynamic";
 import Image from "next/image";
 import { type ChangeEvent, type FormEvent, useEffect, useRef, useState } from "react";
-import type { Worker } from "tesseract.js";
 
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
-import { TransactionReviewForm } from "@/features/receipts/TransactionReviewForm";
 import type { ParsedReceipt } from "@/lib/parser/receipt-parser";
 
 type CategoryOption = {
@@ -17,45 +16,31 @@ type CategoryOption = {
 type UploadResult = {
   receiptId: string;
   filePath: string;
+  mimeType: string;
   rawText: string;
   parsed: ParsedReceipt;
-  mimeType?: string;
 };
 
-type UploadedReceipt = {
-  receiptId: string;
-  filePath: string;
-};
+type OcrStage = "idle" | "uploading" | "processing" | "completed" | "failed";
 
-type OcrStage =
-  | "idle"
-  | "uploading"
-  | "reading-pdf"
-  | "rendering-pdf"
-  | "preparing"
-  | "loading-language"
-  | "recognizing"
-  | "processing"
-  | "completed"
-  | "failed";
-
-const ocrTimeoutMs = 60000;
-const timeoutMessage = "Gagal membaca struk. Proses OCR terlalu lama. Coba unggah gambar lain atau ulangi lagi.";
 const genericOcrMessage = "Gagal membaca struk. Coba unggah file lain atau gunakan gambar yang lebih jelas.";
 const missingFileMessage = "Pilih file struk terlebih dahulu.";
 const unsupportedFileMessage = "Format file tidak didukung. Gunakan JPG, PNG, WEBP, atau PDF.";
 const allowedReceiptMimeTypes = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
 const isDevelopment = process.env.NODE_ENV === "development";
 
+const TransactionReviewForm = dynamic(
+  () => import("@/features/receipts/TransactionReviewForm").then((module) => module.TransactionReviewForm),
+  {
+    loading: () => <div className="rounded-md border border-slate-200 bg-white p-4 text-sm text-slate-600">Memuat formulir tinjauan...</div>,
+    ssr: false
+  }
+);
+
 const stageLabels: Record<OcrStage, string> = {
   idle: "",
-  uploading: "Memproses file...",
-  "reading-pdf": "Membaca PDF...",
-  "rendering-pdf": "Mengubah PDF menjadi gambar...",
-  preparing: "Menyiapkan OCR...",
-  "loading-language": "Memuat data bahasa...",
-  recognizing: "Membaca struk...",
-  processing: "Memproses hasil...",
+  uploading: "Mengunggah struk...",
+  processing: "Membaca struk di server...",
   completed: "Selesai membaca struk",
   failed: ""
 };
@@ -72,43 +57,25 @@ function logOcrError(message: string, details?: unknown) {
   }
 }
 
-function getOcrStageFromStatus(status: string): OcrStage {
-  const normalized = status.toLowerCase();
-
-  if (normalized.includes("load") || normalized.includes("initializ")) {
-    return "loading-language";
-  }
-
-  if (normalized.includes("recogniz")) {
-    return "recognizing";
-  }
-
-  return "preparing";
-}
-
-async function getPdfJs() {
-  const pdfjs = await import("pdfjs-dist");
-  pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.mjs", import.meta.url).toString();
-
-  return pdfjs;
-}
-
 export function ReceiptUploadForm({ categories }: { categories: CategoryOption[] }) {
   const [result, setResult] = useState<UploadResult | null>(null);
-  const [uploadedReceipt, setUploadedReceipt] = useState<UploadedReceipt | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [error, setError] = useState("");
   const [stage, setStage] = useState<OcrStage>("idle");
   const [progress, setProgress] = useState(0);
-  const [notice, setNotice] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [lastAction, setLastAction] = useState("Halaman scanner aktif");
-  const workerRef = useRef<Worker | null>(null);
-  const cancelledRef = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const fileInputMountedRef = useRef(false);
 
   useEffect(() => {
     logOcr("scanner rendered");
+    const hydrationTimer = window.setTimeout(() => {
+      setLastAction((currentAction) => (currentAction === "Halaman scanner aktif" ? "Komponen client aktif" : currentAction));
+      logOcr("client component active");
+    }, 0);
+
+    return () => window.clearTimeout(hydrationTimer);
   }, []);
 
   useEffect(() => {
@@ -141,21 +108,14 @@ export function ReceiptUploadForm({ categories }: { categories: CategoryOption[]
     const file = event.target.files?.[0] ?? null;
     logOcr("file selected");
     setSelectedFile(file);
-    setUploadedReceipt(null);
     setResult(null);
     setStage("idle");
     setProgress(0);
-    setNotice("");
     setError("");
 
     if (file) {
       setLastAction("File dipilih");
       logOcr("selected file saved to state", {
-        name: file.name,
-        type: file.type,
-        size: file.size
-      });
-      logOcr("file name/type/size", {
         name: file.name,
         type: file.type,
         size: file.size
@@ -169,251 +129,6 @@ export function ReceiptUploadForm({ categories }: { categories: CategoryOption[]
     logOcr("form submit triggered");
     event.preventDefault();
     logOcr("preventDefault called");
-  }
-
-  async function markReceiptFailed(receiptId: string, message: string) {
-    try {
-      await fetch(`/api/receipts/${receiptId}/ocr-failed`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({ message })
-      });
-    } catch (requestError) {
-      logOcrError("Failed to mark receipt as OCR_FAILED", requestError);
-    }
-  }
-
-  async function terminateWorker() {
-    const worker = workerRef.current;
-    workerRef.current = null;
-
-    if (worker) {
-      await worker.terminate().catch((terminateError) => {
-        logOcr("Worker termination failed", terminateError);
-      });
-    }
-  }
-
-  async function runClientOcr(file: File | Blob) {
-    const { createWorker } = await import("tesseract.js");
-    let timeoutId: ReturnType<typeof setTimeout> | undefined;
-
-    try {
-      setStage("preparing");
-      setProgress(0);
-      setLastAction("OCR dimulai");
-      logOcr("OCR started");
-      logOcr("Worker creation started");
-
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        timeoutId = setTimeout(() => {
-          logOcr("OCR timed out after 60 seconds");
-          void terminateWorker();
-          reject(new Error("OCR_TIMEOUT"));
-        }, ocrTimeoutMs);
-      });
-
-      const recognitionPromise = (async () => {
-        const worker = await createWorker("eng", 1, {
-          workerPath: "/tesseract/worker.min.js",
-          corePath: "/tesseract/tesseract-core-simd-lstm.wasm.js",
-          langPath: "/tesseract/lang",
-          workerBlobURL: false,
-          gzip: true,
-          cacheMethod: "write",
-          logger: (message) => {
-            const nextStage = getOcrStageFromStatus(message.status);
-            setStage(nextStage);
-            setProgress(Math.round((message.progress ?? 0) * 100));
-            logOcr("Tesseract progress", message);
-          },
-          errorHandler: (workerError) => {
-            logOcr("Tesseract worker error", workerError);
-          }
-        });
-
-        workerRef.current = worker;
-        logOcr("Worker created with language", "eng");
-
-        if (cancelledRef.current) {
-          throw new Error("OCR_CANCELLED");
-        }
-
-        setStage("recognizing");
-        logOcr("OCR recognition started");
-        await worker.setParameters({
-          preserve_interword_spaces: "1"
-        });
-
-        const recognition = await worker.recognize(file);
-        logOcr("OCR recognition completed");
-        setLastAction("OCR selesai");
-        logOcr("OCR completed");
-        setStage("processing");
-
-        return recognition.data.text.trim();
-      })();
-
-      return await Promise.race([recognitionPromise, timeoutPromise]);
-    } finally {
-      if (timeoutId) {
-        clearTimeout(timeoutId);
-      }
-
-      await terminateWorker();
-    }
-  }
-
-  async function saveOcrResult(receiptId: string, rawText: string) {
-    const response = await fetch(`/api/receipts/${receiptId}/ocr-result`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ rawText })
-    });
-    const payload = (await response.json()) as UploadResult | { error?: string };
-
-    if (!response.ok) {
-      throw new Error("error" in payload && payload.error ? payload.error : "Gagal menyimpan hasil OCR. Silakan coba lagi.");
-    }
-
-    return payload as UploadResult;
-  }
-
-  async function renderPdfPageToBlob(file: File): Promise<{ rawText: string } | { imageBlob: Blob }> {
-    setStage("reading-pdf");
-    setProgress(10);
-
-    try {
-      setLastAction("Pemrosesan PDF dimulai");
-      logOcr("PDF processing started", {
-        name: file.name,
-        type: file.type,
-        size: file.size
-      });
-      const pdfjs = await getPdfJs();
-      const pdf = await pdfjs.getDocument({ data: await file.arrayBuffer() }).promise;
-
-      if (pdf.numPages > 1) {
-        setNotice("Untuk saat ini, hanya halaman pertama PDF yang akan dibaca.");
-      }
-
-      const page = await pdf.getPage(1);
-      const textContent = await page.getTextContent();
-      const embeddedText = textContent.items
-        .map((item) => ("str" in item ? item.str : ""))
-        .join("\n")
-        .trim();
-
-      if (embeddedText) {
-        logOcr("PDF processing completed", "embedded text extracted");
-        return { rawText: embeddedText };
-      }
-
-      setStage("rendering-pdf");
-      setProgress(25);
-
-      const viewport = page.getViewport({ scale: 2 });
-      const canvas = document.createElement("canvas");
-      const context = canvas.getContext("2d");
-
-      if (!context) {
-        throw new Error("PDF_CANVAS_FAILED");
-      }
-
-      canvas.width = Math.ceil(viewport.width);
-      canvas.height = Math.ceil(viewport.height);
-
-      await page.render({ canvas, canvasContext: context, viewport }).promise;
-
-      const blob = await new Promise<Blob>((resolve, reject) => {
-        canvas.toBlob((renderedBlob) => {
-          if (renderedBlob) {
-            resolve(renderedBlob);
-          } else {
-            reject(new Error("PDF_RENDER_FAILED"));
-          }
-        }, "image/png");
-      });
-
-      logOcr("PDF processing completed", "first page rendered");
-      return { imageBlob: blob };
-    } catch (pdfError) {
-      logOcrError("PDF processing failed", pdfError);
-      throw new Error("PDF_PROCESSING_FAILED");
-    }
-  }
-
-  async function extractTextFromFile(file: File) {
-    if (file.type !== "application/pdf") {
-      setLastAction("Cabang gambar dipilih");
-      logOcr("image branch selected", {
-        name: file.name,
-        type: file.type,
-        size: file.size
-      });
-      return runClientOcr(file);
-    }
-
-    setLastAction("Cabang PDF dipilih");
-    logOcr("PDF branch selected", {
-      name: file.name,
-      type: file.type,
-      size: file.size
-    });
-    const pdfResult = await renderPdfPageToBlob(file);
-
-    if ("rawText" in pdfResult) {
-      setStage("processing");
-      setProgress(90);
-      return pdfResult.rawText;
-    }
-
-    return runClientOcr(pdfResult.imageBlob);
-  }
-
-  async function processOcr(file: File, receipt: UploadedReceipt) {
-    cancelledRef.current = false;
-    setIsProcessing(true);
-    setError("");
-    setNotice("");
-    setResult(null);
-
-    try {
-      const rawText = await extractTextFromFile(file);
-
-      if (cancelledRef.current) {
-        throw new Error("OCR_CANCELLED");
-      }
-
-      const savedResult = await saveOcrResult(receipt.receiptId, rawText);
-      setLastAction("Parser selesai");
-      logOcr("parser completed", { receiptId: savedResult.receiptId });
-      setResult({ ...savedResult, mimeType: file.type });
-      setLastAction("Formulir tinjauan ditampilkan");
-      setStage("completed");
-      setProgress(100);
-      logOcr("OCR flow completed");
-    } catch (ocrError) {
-      const message =
-        ocrError instanceof Error && ocrError.message === "OCR_TIMEOUT"
-          ? timeoutMessage
-          : ocrError instanceof Error && ocrError.message === "OCR_CANCELLED"
-            ? "Proses OCR dibatalkan."
-            : genericOcrMessage;
-
-      setStage("failed");
-      setError(message);
-      setLastAction("Terjadi kesalahan");
-      await markReceiptFailed(receipt.receiptId, message);
-      logOcrError("error caught", ocrError);
-    } finally {
-      await terminateWorker();
-      setIsProcessing(false);
-    }
   }
 
   async function uploadReceipt(file: File) {
@@ -441,39 +156,52 @@ export function ReceiptUploadForm({ categories }: { categories: CategoryOption[]
       return;
     }
 
-    setLastAction("Validasi berhasil");
-    logOcr("validation passed");
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    setLastAction("Pemrosesan dimulai");
     setError("");
-    setNotice("");
     setStage("uploading");
-    setProgress(0);
+    setProgress(25);
     setIsProcessing(true);
     setResult(null);
 
     try {
-      setLastAction("Pemrosesan dimulai");
-      logOcr("processing started");
       const formData = new FormData();
       formData.append("file", file);
+      setStage("processing");
+      setProgress(70);
+
       const response = await fetch("/api/receipts/upload", {
         method: "POST",
-        body: formData
+        body: formData,
+        signal: controller.signal
       });
-      const payload = (await response.json()) as UploadedReceipt | { error?: string };
+      const payload = (await response.json()) as UploadResult | { error?: string };
 
       if (!response.ok) {
-        throw new Error("error" in payload && payload.error ? payload.error : "Gagal mengunggah struk. Silakan coba lagi.");
+        throw new Error("error" in payload && payload.error ? payload.error : genericOcrMessage);
       }
 
-      const receipt = payload as UploadedReceipt;
-      setUploadedReceipt(receipt);
-      await processOcr(file, receipt);
+      const uploadedResult = payload as UploadResult;
+      setResult(uploadedResult);
+      setLastAction("Formulir tinjauan ditampilkan");
+      setStage("completed");
+      setProgress(100);
+      logOcr("server OCR flow completed", { receiptId: uploadedResult.receiptId });
     } catch (uploadError) {
+      const isAbortError = uploadError instanceof DOMException && uploadError.name === "AbortError";
+      const message = isAbortError
+        ? "Proses OCR dibatalkan."
+        : uploadError instanceof Error && uploadError.message
+          ? uploadError.message
+          : genericOcrMessage;
+
       setStage("failed");
-      setError(uploadError instanceof Error && uploadError.message ? uploadError.message : genericOcrMessage);
-      setLastAction("Terjadi kesalahan");
+      setError(message);
+      setLastAction(isAbortError ? "Proses OCR dibatalkan" : "Terjadi kesalahan");
       logOcrError("error caught", uploadError);
     } finally {
+      abortControllerRef.current = null;
       setIsProcessing(false);
     }
   }
@@ -481,12 +209,10 @@ export function ReceiptUploadForm({ categories }: { categories: CategoryOption[]
   async function handleScan() {
     setLastAction("Tombol Baca Struk diklik");
     logOcr("scan button clicked");
-    logOcr("validation started");
     setIsProcessing(true);
     setStage("uploading");
     setProgress(0);
     setError("");
-    setNotice("");
     setResult(null);
 
     if (!selectedFile) {
@@ -501,30 +227,30 @@ export function ReceiptUploadForm({ categories }: { categories: CategoryOption[]
     await uploadReceipt(selectedFile);
   }
 
-  async function cancelOcr() {
-    cancelledRef.current = true;
-    await terminateWorker();
+  function handleInteractionTest() {
+    setLastAction("Tes interaksi berhasil");
+    logOcr("interaction test clicked");
+  }
+
+  function cancelOcr() {
+    abortControllerRef.current?.abort();
     setStage("failed");
     setIsProcessing(false);
     setError("Proses OCR dibatalkan.");
     setLastAction("Proses OCR dibatalkan");
-
-    if (uploadedReceipt) {
-      await markReceiptFailed(uploadedReceipt.receiptId, "Proses OCR dibatalkan.");
-    }
   }
 
   async function retryOcr() {
-    if (!selectedFile || !uploadedReceipt) {
+    if (!selectedFile) {
       setError("Unggah struk terlebih dahulu.");
       return;
     }
 
-    await processOcr(selectedFile, uploadedReceipt);
+    await uploadReceipt(selectedFile);
   }
 
   const progressLabel = stageLabels[stage];
-  const canRetry = stage === "failed" && Boolean(selectedFile && uploadedReceipt);
+  const canRetry = stage === "failed" && Boolean(selectedFile);
   const debugProcessingState = progressLabel || (isProcessing ? "Memproses file..." : "Menunggu file");
 
   return (
@@ -539,6 +265,13 @@ export function ReceiptUploadForm({ categories }: { categories: CategoryOption[]
               <p>Ukuran file: {selectedFile ? getFileSizeLabel(selectedFile.size) : "-"}</p>
               <p>Aksi terakhir: {lastAction}</p>
               <p>Status proses: {debugProcessingState}</p>
+              <button
+                className="mt-2 w-fit rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                onClick={handleInteractionTest}
+                type="button"
+              >
+                Tes Interaksi
+              </button>
             </div>
           ) : null}
           <label className="grid gap-2 text-sm font-medium text-slate-700">
@@ -577,7 +310,6 @@ export function ReceiptUploadForm({ categories }: { categories: CategoryOption[]
               </div>
             </div>
           ) : null}
-          {notice ? <p className="rounded-md bg-amber-50 p-3 text-sm text-amber-700">{notice}</p> : null}
           {error ? <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
           <div className="flex flex-col gap-3 sm:flex-row">
             <button
@@ -607,7 +339,7 @@ export function ReceiptUploadForm({ categories }: { categories: CategoryOption[]
           <Card>
             <h2 className="text-base font-semibold text-slate-950">Hasil OCR</h2>
             {result.mimeType === "application/pdf" ? (
-              <div className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">PDF struk sudah diproses dari halaman pertama.</div>
+              <div className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">PDF struk sudah diproses di server.</div>
             ) : (
               <div className="mt-4 overflow-hidden rounded-md border border-slate-200 bg-slate-100">
                 <Image

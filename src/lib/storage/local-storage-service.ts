@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { mkdir, writeFile } from "fs/promises";
+import { mkdir, readFile, writeFile } from "fs/promises";
 import path from "path";
 
 import type { StorageService, StoredFile } from "@/lib/storage/storage-service";
@@ -34,6 +34,25 @@ export class LocalStorageService implements StorageService {
       mimeType: file.type,
       fileSize: file.size
     };
+  }
+
+  async readReceipt(filePath: string, userId: string): Promise<Buffer> {
+    const normalizedPublicPath = path.posix.normalize(filePath);
+    const expectedPrefix = `${publicUploadRoot}/${userId}/`;
+
+    if (!normalizedPublicPath.startsWith(expectedPrefix)) {
+      throw new Error("Receipt file path is outside the user upload directory.");
+    }
+
+    const fileName = path.posix.basename(normalizedPublicPath);
+    const absolutePath = path.resolve(uploadRoot, userId, fileName);
+    const userDirectory = path.resolve(uploadRoot, userId);
+
+    if (!absolutePath.startsWith(`${userDirectory}${path.sep}`)) {
+      throw new Error("Receipt file path is outside the user upload directory.");
+    }
+
+    return readFile(absolutePath);
   }
 }
 
