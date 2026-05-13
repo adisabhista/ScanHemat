@@ -1,4 +1,5 @@
 import { classifyReceiptCategory, type TransactionCategoryName } from "@/lib/categories/category-classifier";
+import { isNonTransactionDateLine, parseReceiptDateText, type ReceiptDateDebug } from "@/lib/parser/receipt-date-parser";
 
 export type ParsedReceiptItem = {
   name: string;
@@ -7,10 +8,18 @@ export type ParsedReceiptItem = {
   totalPrice?: number;
 };
 
+export type ReceiptTotalCandidate = {
+  amount: number;
+  sourceText: string;
+  isSelected: boolean;
+  reason: string;
+};
+
 export type ParsedReceipt = {
   merchant?: string;
   transactionDate?: string;
   totalAmount?: number;
+  totalCandidates?: ReceiptTotalCandidate[];
   items: ParsedReceiptItem[];
   confidence?: "high" | "low";
   warnings?: string[];
@@ -19,6 +28,7 @@ export type ParsedReceipt = {
   categoryConfidence?: number;
   categoryReason?: string | null;
   categorySource?: "gemini" | "fallback" | "default";
+  dateDebug?: ReceiptDateDebug[];
 };
 
 type AmountToken = {
@@ -59,9 +69,9 @@ const merchantRejectTerms = [
   "NO."
 ];
 
-const dateRejectTerms = ["TANGGAL PENGUKUHAN", "PENGUKUHAN", "NPWP", "NWP", "TAX", "PAJAK", "REGISTRATION"];
-
 const totalKeywords = [
+  "TOTAL PEMBAYARAN",
+  "JUMLAH PEMBAYARAN",
   "GRAND TOTAL",
   "TOTAL BELANJA",
   "TOTAL BAYAR",
@@ -75,6 +85,16 @@ const totalKeywords = [
 ];
 
 const totalRejectTerms = [
+  "TOTAL KUANTITAS",
+  "KUANTITAS",
+  "PRODUK",
+  "HARGA PRODUK",
+  "SUBTOTAL PESANAN",
+  "SUBTOTAL PENGIRIMAN",
+  "BIAYA LAYANAN",
+  "TOTAL DISKON PENGIRIMAN",
+  "DISKON VOUCHER TOKO",
+  "DISKON VOUCHER SHOPEE",
   "TOTAL ITEM",
   "KEMBALI",
   "CHANGE",
@@ -155,25 +175,22 @@ const itemRejectTerms = [
 ];
 
 const discountTerms = ["DISKON", "DISC", "HEMAT", "POTONGAN", "PROMO"];
-
-const monthMap: Record<string, string> = {
-  JAN: "01",
-  FEB: "02",
-  MAR: "03",
-  APR: "04",
-  MEI: "05",
-  MAY: "05",
-  JUN: "06",
-  JUL: "07",
-  AGU: "08",
-  AUG: "08",
-  SEP: "09",
-  OKT: "10",
-  OCT: "10",
-  NOV: "11",
-  DES: "12",
-  DEC: "12"
-};
+const ecommerceSignals = [
+  "SHOPEE",
+  "FAKTUR PESANAN",
+  "NO. PESANAN",
+  "NAMA PENJUAL",
+  "NAMA PEMBELI",
+  "RINCIAN PESANAN",
+  "TOTAL PEMBAYARAN",
+  "DISKON VOUCHER SHOPEE"
+];
+const ecommercePlatformMerchants = ["PT SHOPEE INTERNATIONAL INDONESIA", "SHOPEE"];
+const ecommerceTotalPriority = ["TOTAL PEMBAYARAN", "TOTAL BAYAR", "JUMLAH PEMBAYARAN", "GRAND TOTAL"];
+const ecommerceSubtotalTerms = ["SUBTOTAL PESANAN", "SUBTOTAL", "HARGA PRODUK"];
+const ecommerceShippingTerms = ["PENGIRIMAN", "JASA KIRIM", "ONGKIR", "SHIPPING"];
+const ecommerceServiceFeeTerms = ["BIAYA LAYANAN", "SERVICE FEE", "LAYANAN"];
+const ecommerceQuantityTerms = ["TOTAL KUANTITAS", "KUANTITAS", "PRODUK"];
 
 function cleanLines(rawText: string) {
   return rawText
@@ -247,7 +264,10 @@ export function parseIndonesianAmount(value: string) {
 }
 
 function parseAmountToken(token: string) {
-  const withoutCurrency = token.trim().replace(/^rp\s*/i, "");
+  const withoutCurrency = token
+    .trim()
+    .replace(/^-\s*rp\s*/i, "-")
+    .replace(/^rp\s*/i, "");
 
   if (/[A-Za-z]/.test(withoutCurrency)) {
     return undefined;
@@ -269,7 +289,7 @@ function parseAmountToken(token: string) {
 }
 
 function extractAmountTokens(line: string): AmountToken[] {
-  const matches = line.match(/(?:Rp\s*)?-?\d{1,3}(?:[.,]\d{3})+(?:,\d{2})?|(?:Rp\s*)?-?\d+/gi) ?? [];
+  const matches = line.match(/-?\s*(?:Rp\s*)?\d{1,3}(?:[.,]\d{3})+(?:,\d{2})?|-?\s*(?:Rp\s*)?\d+/gi) ?? [];
 
   return matches
     .map((match) => ({ raw: match, amount: parseAmountToken(match) }))
@@ -278,6 +298,13 @@ function extractAmountTokens(line: string): AmountToken[] {
 
 function extractAmounts(line: string) {
   return extractAmountTokens(line).map((token) => token.amount);
+}
+
+function isEcommerceReceipt(lines: string[]) {
+  const text = normalizeForMatching(lines.join(" "));
+  const matchCount = ecommerceSignals.filter((signal) => text.includes(signal)).length;
+
+  return matchCount >= 2 || text.includes("TOTAL PEMBAYARAN");
 }
 
 function isMostlyNumeric(line: string) {
@@ -316,6 +343,18 @@ function isLikelyMerchantLine(line: string) {
 
 function extractMerchant(lines: string[]): { merchant?: string; warnings: string[] } {
   const warnings: string[] = [];
+  const sellerLine = lines.find((line) => normalizeForMatching(line).includes("NAMA PENJUAL"));
+
+  if (sellerLine) {
+    const merchant = sellerLine
+      .replace(/^.*?NAMA\s+PENJUAL\s*:?\s*/i, "")
+      .trim();
+
+    if (merchant) {
+      return { merchant, warnings };
+    }
+  }
+
   const candidateLines: string[] = [];
   
   // Collect the first few likely merchant lines from the top of the receipt
@@ -346,6 +385,11 @@ function extractMerchant(lines: string[]): { merchant?: string; warnings: string
     merchant = `${candidateLines[0]} ${candidateLines[1]}`;
   }
 
+  if (ecommercePlatformMerchants.includes(normalizeForMatching(merchant))) {
+    warnings.push("Merchant marketplace diabaikan karena bukan nama penjual.");
+    return { merchant: undefined, warnings };
+  }
+
   if (merchant.split(" ").length === 1 && knownMerchants.every(m => !normalizeForMatching(merchant).includes(m))) {
     warnings.push("Merchant terdeteksi hanya 1 kata, periksa kembali.");
   }
@@ -353,73 +397,56 @@ function extractMerchant(lines: string[]): { merchant?: string; warnings: string
   return { merchant, warnings };
 }
 
-function buildDate(yearValue: string, monthValue: string, dayValue: string) {
-  const day = dayValue.padStart(2, "0");
-  const month = monthValue.padStart(2, "0");
-  
-  let year = yearValue;
-  if (yearValue.length === 2) {
-    const y = parseInt(yearValue, 10);
-    // Rough heuristic: if 2-digit year is > 50, it's 19XX, else 20XX
-    year = y > 50 ? `19${yearValue}` : `20${yearValue}`;
-  }
+function extractDate(lines: string[]): { transactionDate?: string; warnings: string[]; dateDebug: ReceiptDateDebug[] } {
+  const warnings: string[] = [];
+  const dateDebug: ReceiptDateDebug[] = [];
+  const debuggedLines = new Set<string>();
 
-  return `${year}-${month}-${day}`;
-}
-
-function extractDateFromLine(line: string) {
-  if (hasAnyTerm(line, dateRejectTerms)) {
-    return undefined;
-  }
-
-  const iso = line.match(/\b(\d{4})[\/.-](\d{1,2})[\/.-](\d{1,2})(?:\s+\d{1,2}:\d{2}(?::\d{2})?)?\b/);
-  if (iso) {
-    return buildDate(iso[1], iso[2], iso[3]);
-  }
-
-  const numeric = line.match(/\b(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{2,4})(?:\s*\(?\d{1,2}:\d{2}(?::\d{2})?\)?)?\b/);
-  if (numeric) {
-    return buildDate(numeric[3], numeric[2], numeric[1]);
-  }
-
-  const named = line.match(/\b(\d{1,2})\s+([A-Za-z]{3})[a-z]*\s+(\d{2,4})\b/);
-  if (named) {
-    const month = monthMap[named[2].slice(0, 3).toUpperCase()];
-    if (month) {
-      return buildDate(named[3], month, named[1]);
+  for (const line of lines) {
+    if (isNonTransactionDateLine(line) && /\d{1,4}[/-]\d{1,2}[/-]\d{1,4}/.test(line)) {
+      dateDebug.push(parseReceiptDateText(line).debug);
+      debuggedLines.add(line);
     }
   }
-
-  return undefined;
-}
-
-function extractDate(lines: string[]): { transactionDate?: string; warnings: string[] } {
-  const warnings: string[] = [];
   
   // Prefer lines with time
   const timeLines = lines.filter(line => /\b\d{1,2}:\d{2}(?::\d{2})?\b/.test(line));
   for (const line of timeLines) {
-    const date = extractDateFromLine(line);
-    if (date) {
-      return { transactionDate: date, warnings };
+    const result = parseReceiptDateText(line);
+
+    if (!debuggedLines.has(line)) {
+      dateDebug.push(result.debug);
+      debuggedLines.add(line);
+    }
+
+    if (result.isoDate) {
+      return { transactionDate: result.isoDate, warnings, dateDebug };
     }
   }
 
   // Fallback to any line
   for (const line of lines) {
-    const date = extractDateFromLine(line);
-    if (date) {
-      const year = parseInt(date.substring(0, 4), 10);
-      const currentYear = new Date().getFullYear();
-      if (Math.abs(year - currentYear) > 5) {
-        warnings.push("Tahun transaksi terdeteksi tidak wajar, periksa kembali.");
-      }
-      return { transactionDate: date, warnings };
+    if (timeLines.includes(line)) {
+      continue;
+    }
+
+    const result = parseReceiptDateText(line);
+
+    if (
+      !debuggedLines.has(line) &&
+      (result.isoDate || result.debug.detectedPattern || result.debug.rejectionReason !== "Tidak ada pola tanggal transaksi yang cocok.")
+    ) {
+      dateDebug.push(result.debug);
+      debuggedLines.add(line);
+    }
+
+    if (result.isoDate) {
+      return { transactionDate: result.isoDate, warnings, dateDebug };
     }
   }
 
   warnings.push("Tanggal transaksi tidak ditemukan atau berada di bagian yang diabaikan (misal: Tanggal Pengukuhan).");
-  return { transactionDate: undefined, warnings };
+  return { transactionDate: undefined, warnings, dateDebug };
 }
 
 function isTotalCandidateLine(line: string) {
@@ -432,13 +459,120 @@ function isTotalCandidateLine(line: string) {
   return totalKeywords.some((keyword) => normalized.includes(keyword));
 }
 
+function getEcommerceCandidateReason(line: string) {
+  const normalized = normalizeForMatching(line);
+
+  if (ecommerceQuantityTerms.some((term) => normalized.includes(term))) {
+    return "Ditolak karena baris kuantitas, bukan total pembayaran.";
+  }
+
+  if (discountTerms.some((term) => normalized.includes(term))) {
+    return "Ditolak karena baris diskon/voucher.";
+  }
+
+  if (ecommerceShippingTerms.some((term) => normalized.includes(term))) {
+    return "Ditolak karena baris biaya pengiriman.";
+  }
+
+  if (ecommerceServiceFeeTerms.some((term) => normalized.includes(term))) {
+    return "Ditolak karena baris biaya layanan.";
+  }
+
+  if (ecommerceSubtotalTerms.some((term) => normalized.includes(term))) {
+    return "Ditolak karena subtotal/harga produk, bukan pembayaran akhir.";
+  }
+
+  const totalKeyword = ecommerceTotalPriority.find((keyword) => normalized.includes(keyword));
+  if (totalKeyword) {
+    return `Dipilih dari prioritas e-commerce: ${totalKeyword}.`;
+  }
+
+  return "Ditolak karena bukan prioritas total e-commerce.";
+}
+
+function getEcommerceTotalRank(line: string) {
+  const normalized = normalizeForMatching(line);
+  const index = ecommerceTotalPriority.findIndex((keyword) => normalized.includes(keyword));
+
+  return index >= 0 ? index : Number.POSITIVE_INFINITY;
+}
+
+function isRejectedEcommerceTotalLine(line: string) {
+  const normalized = normalizeForMatching(line);
+
+  return (
+    ecommerceQuantityTerms.some((term) => normalized.includes(term)) ||
+    ecommerceSubtotalTerms.some((term) => normalized.includes(term)) ||
+    ecommerceShippingTerms.some((term) => normalized.includes(term)) ||
+    ecommerceServiceFeeTerms.some((term) => normalized.includes(term)) ||
+    discountTerms.some((term) => normalized.includes(term))
+  );
+}
+
 function getTotalKeywordRank(line: string) {
   const normalized = normalizeForMatching(line);
   const index = totalKeywords.findIndex((keyword) => normalized.includes(keyword));
   return index >= 0 ? index : Number.POSITIVE_INFINITY;
 }
 
-function extractTotal(lines: string[], itemStartIndex: number | undefined, summaryStartIndex: number | undefined): { totalAmount?: number; warnings: string[] } {
+function extractEcommerceTotal(lines: string[]): { totalAmount?: number; warnings: string[]; totalCandidates: ReceiptTotalCandidate[] } {
+  const warnings: string[] = [];
+  const rawCandidates: Array<{ amount: number; line: string; rank: number; rejected: boolean; reason: string }> = [];
+
+  for (const line of lines) {
+    const amounts = extractAmounts(line);
+
+    if (amounts.length === 0) {
+      continue;
+    }
+
+    const normalized = normalizeForMatching(line);
+    const isPriorityTotal = ecommerceTotalPriority.some((keyword) => normalized.includes(keyword));
+    const isRejected = isRejectedEcommerceTotalLine(line);
+
+    if (!isPriorityTotal && !isRejected) {
+      continue;
+    }
+
+    rawCandidates.push({
+      amount: amounts[amounts.length - 1],
+      line,
+      rank: getEcommerceTotalRank(line),
+      rejected: isRejected || !isPriorityTotal,
+      reason: getEcommerceCandidateReason(line)
+    });
+  }
+
+  const selected = rawCandidates
+    .filter((candidate) => !candidate.rejected && Number.isFinite(candidate.rank))
+    .sort((first, second) => first.rank - second.rank)[0];
+
+  if (!selected) {
+    warnings.push("Total pembayaran e-commerce tidak ditemukan, kembali ke parser umum.");
+    return { warnings, totalCandidates: [] };
+  }
+
+  return {
+    totalAmount: selected.amount,
+    warnings,
+    totalCandidates: rawCandidates.map((candidate) => ({
+      amount: candidate.amount,
+      sourceText: candidate.line,
+      isSelected: candidate === selected,
+      reason: candidate === selected ? candidate.reason : candidate.reason
+    }))
+  };
+}
+
+function extractTotal(lines: string[], itemStartIndex: number | undefined, summaryStartIndex: number | undefined, isEcommerce: boolean): { totalAmount?: number; warnings: string[]; totalCandidates?: ReceiptTotalCandidate[] } {
+  if (isEcommerce) {
+    const ecommerceTotal = extractEcommerceTotal(lines);
+
+    if (ecommerceTotal.totalAmount !== undefined) {
+      return ecommerceTotal;
+    }
+  }
+
   const warnings: string[] = [];
   const candidates: { amount: number; rank: number; index: number; line: string }[] = [];
 
@@ -604,7 +738,62 @@ function findFirstSummaryLine(lines: string[]) {
   return index >= 0 ? index : lines.length;
 }
 
-function extractItems(lines: string[], tableStartIndex: number | undefined, summaryStartIndex: number | undefined) {
+function extractEcommerceItems(lines: string[]) {
+  const items: ParsedReceiptItem[] = [];
+  const headerIndex = lines.findIndex((line) => normalizeForMatching(line).includes("NO. PRODUK VARIASI HARGA PRODUK KUANTITAS SUBTOTAL"));
+
+  if (headerIndex < 0) {
+    return items;
+  }
+
+  for (let index = headerIndex + 1; index < lines.length - 1; index += 1) {
+    const currentLine = lines[index];
+    const nextLine = lines[index + 1];
+    const normalized = normalizeForMatching(currentLine);
+
+    if (/^\d+$/.test(currentLine.trim())) {
+      continue;
+    }
+
+    if (normalized.includes("TOTAL PEMBAYARAN") || normalized.includes("CATATAN")) {
+      break;
+    }
+
+    if (!currentLine.includes("[")) {
+      continue;
+    }
+
+    const amounts = extractAmountTokens(nextLine);
+
+    if (amounts.length < 2) {
+      continue;
+    }
+
+    const unitPrice = amounts[0].amount;
+    const totalPrice = amounts[amounts.length - 1].amount;
+    const quantityToken = amounts.length >= 3 ? amounts[amounts.length - 2].amount : totalPrice / unitPrice;
+    const quantity = Number.isFinite(quantityToken) ? quantityToken : undefined;
+
+    items.push({
+      name: currentLine.trim(),
+      quantity,
+      unitPrice,
+      totalPrice
+    });
+  }
+
+  return items.slice(0, 20);
+}
+
+function extractItems(lines: string[], tableStartIndex: number | undefined, summaryStartIndex: number | undefined, isEcommerce: boolean) {
+  if (isEcommerce) {
+    const ecommerceItems = extractEcommerceItems(lines);
+
+    if (ecommerceItems.length > 0) {
+      return ecommerceItems;
+    }
+  }
+
   const items: ParsedReceiptItem[] = [];
   const startIndex = tableStartIndex ?? Math.min(2, lines.length);
   const endIndex = summaryStartIndex ?? lines.length;
@@ -630,15 +819,16 @@ function extractItems(lines: string[], tableStartIndex: number | undefined, summ
 
 export function parseReceiptText(rawText: string): ParsedReceipt {
   const lines = cleanLines(rawText);
+  const ecommerceReceipt = isEcommerceReceipt(lines);
 
   const { merchant, warnings: merchantWarnings } = extractMerchant(lines);
-  const { transactionDate, warnings: dateWarnings } = extractDate(lines);
+  const { transactionDate, warnings: dateWarnings, dateDebug } = extractDate(lines);
   
   const tableStartIndex = findItemTableStart(lines);
   const summaryStartIndex = findFirstSummaryLine(lines.slice(tableStartIndex ?? 0)) + (tableStartIndex ?? 0);
 
-  const { totalAmount, warnings: totalWarnings } = extractTotal(lines, tableStartIndex, summaryStartIndex);
-  const items = extractItems(lines, tableStartIndex, summaryStartIndex);
+  const { totalAmount, warnings: totalWarnings, totalCandidates } = extractTotal(lines, tableStartIndex, summaryStartIndex, ecommerceReceipt);
+  const items = extractItems(lines, tableStartIndex, summaryStartIndex, ecommerceReceipt);
 
   const category = classifyReceiptCategory({ merchant, items, rawText });
 
@@ -649,11 +839,13 @@ export function parseReceiptText(rawText: string): ParsedReceipt {
     merchant,
     transactionDate,
     totalAmount,
+    totalCandidates,
     items,
     category: category.name,
     categoryConfidence: category.confidence,
     categoryReason: category.reason,
     categorySource: category.source,
+    dateDebug: dateDebug.length > 0 ? dateDebug : undefined,
     confidence,
     warnings: warnings.length > 0 ? warnings : undefined
   };

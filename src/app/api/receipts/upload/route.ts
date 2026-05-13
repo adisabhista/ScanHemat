@@ -117,6 +117,9 @@ export async function POST(request: Request) {
           model: process.env.GEMINI_RECEIPT_MODEL,
           merchantSource: finalReceipt.merchant === aiResultDebug.merchant.value ? "gemini" : "parser",
           dateSource: finalReceipt.transactionDate === aiResultDebug.transactionDate.value ? "gemini" : (finalReceipt.transactionDate ? "parser" : "fallback"),
+          rawDateText: aiResultDebug.transactionDate.sourceText,
+          selectedDate: finalReceipt.transactionDate,
+          dateDebug: finalReceipt.dateDebug,
           totalSource: finalReceipt.totalAmount === aiResultDebug.totalAmount.value ? "gemini" : (finalReceipt.totalAmount === parsedReceipt.totalAmount ? "parser" : "fallback"),
           categorySource: finalReceipt.categorySource,
           selectedCategory: finalReceipt.category,
@@ -124,6 +127,7 @@ export async function POST(request: Request) {
           categoryReason: finalReceipt.categoryReason,
           selectedTotalSourceText: finalReceipt.totalAmount === aiResultDebug.totalAmount.value ? aiResultDebug.totalAmount.sourceText : "parser-fallback",
           selectedTotalReason: finalReceipt.totalAmount === aiResultDebug.totalAmount.value ? aiResultDebug.totalAmount.reason : "validator override",
+          totalCandidates: finalReceipt.totalCandidates,
           rejectedTotalCandidates: (aiResultDebug.totalCandidates ?? []).filter(c => c.amount !== finalReceipt.totalAmount).map(c => ({ amount: c.amount, reason: c.reason })),
           warnings: finalReceipt.warnings
         });
@@ -148,6 +152,11 @@ export async function POST(request: Request) {
       }
 
       if (process.env.NODE_ENV === "development") {
+        console.debug("[AI] Date parsing", {
+          selectedDate: finalReceipt.transactionDate,
+          dateDebug: finalReceipt.dateDebug
+        });
+
         console.debug("[AI] Category classification", {
           categorySource: finalReceipt.categorySource,
           selectedCategory: finalReceipt.category,

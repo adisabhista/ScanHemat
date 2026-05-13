@@ -81,3 +81,56 @@ test("falls back when Gemini returns Semua kategori", () => {
   assert.equal(result.categorySource, "fallback");
   assert.notEqual(result.category, "Semua kategori");
 });
+
+test("re-parses Gemini date sourceText using Indonesian date rules when Gemini value conflicts", () => {
+  const result = validateAndMergeAiResult(
+    buildAiResult({
+      transactionDate: {
+        value: "2016-05-26",
+        confidence: 0.95,
+        sourceText: "16/05/26",
+        reason: "Gemini interpreted the first component as year."
+      }
+    }),
+    buildFallbackResult({
+      transactionDate: "2026-05-16"
+    })
+  );
+
+  assert.equal(result.transactionDate, "2026-05-16");
+  assert.ok(result.dateDebug?.some((item) => item.rawDateText === "16/05/26" && item.selectedIsoDate === "2026-05-16"));
+});
+
+test("overrides Gemini quantity total with Shopee Total Pembayaran fallback", () => {
+  const result = validateAndMergeAiResult(
+    buildAiResult({
+      totalAmount: {
+        value: 1,
+        confidence: 0.9,
+        sourceText: "Total Kuantitas (Aktif) 1 produk",
+        reason: "Wrongly selected quantity as total."
+      }
+    }),
+    buildFallbackResult({
+      totalAmount: 54122,
+      totalCandidates: [
+        {
+          amount: 54122,
+          sourceText: "Total Pembayaran Rp54.122",
+          isSelected: true,
+          reason: "Dipilih dari prioritas e-commerce: TOTAL PEMBAYARAN."
+        },
+        {
+          amount: 1,
+          sourceText: "Total Kuantitas (Aktif) 1 produk",
+          isSelected: false,
+          reason: "Ditolak karena baris kuantitas, bukan total pembayaran."
+        }
+      ]
+    })
+  );
+
+  assert.equal(result.totalAmount, 54122);
+  assert.ok(result.warnings?.includes("Total AI diganti dengan Total Pembayaran dari struk e-commerce."));
+  assert.ok(result.totalCandidates?.some((candidate) => candidate.amount === 54122 && candidate.isSelected));
+});

@@ -33,6 +33,28 @@ Hemat Produk                 12.230
 Total Item : 6
 Member Name : adisabhistal?`;
 
+const shopeeReceiptText = `PT Shopee International Indonesia
+Shopee
+Faktur Pesanan
+Nama Penjual: Colgate Palmolive Official Shop
+Nama Pembeli: Adis
+No. Pesanan Tanggal Transaksi Metode Pembayaran Jasa Kirim
+2603034XHC0ES9 03/03/26 Bank BCA Hemat Kargo
+Subtotal Rp77.600
+Total Kuantitas (Aktif) 1 produk
+Total Pembayaran Rp54.122
+Subtotal Pesanan Rp77.600
+Subtotal Pengiriman Rp1.796
+Biaya Layanan Rp912
+Total Diskon Pengiriman -Rp1.796
+Diskon Voucher Toko -Rp15.000
+Diskon Voucher Shopee -Rp9.390
+Rincian Pesanan
+No. Produk Variasi Harga Produk Kuantitas Subtotal
+1
+[TRIPLEPACK] Colgate Optic White Purple 100 g - Pasta Gigi Pemutih (3pcs)
+Triplepack Rp77.600 1 Rp77.600`;
+
 test("parses supermarket-style item tables without treating metadata as items", () => {
   const parsed = parseReceiptText(superIndoReceiptText);
 
@@ -212,4 +234,48 @@ test("categorizes receipts correctly based on fallback rules", () => {
     assert.equal(parsed.category, c.expected, `Expected ${c.expected} for text: ${c.text.split("\n")[0]}`);
     assert.notEqual(parsed.category, "Semua kategori", "Semua kategori must never be selected");
   }
+});
+
+test("prioritizes Indonesian transaction date over Tanggal Pengukuhan metadata", () => {
+  const text = `TOKO CONTOH
+Tanggal Pengukuhan : 06-06-97
+NPWP 01.234.567.8-901.000
+16/05/26 10:45
+TOTAL 25.000`;
+
+  const parsed = parseReceiptText(text);
+
+  assert.equal(parsed.transactionDate, "2026-05-16");
+  assert.notEqual(parsed.transactionDate, "1997-06-06");
+  assert.ok(parsed.dateDebug?.some((item) => item.rejectionReason === "Baris berisi tanggal non-transaksi."));
+});
+
+test("parses Shopee e-commerce receipt using seller, Total Pembayaran, and item detail", () => {
+  const parsed = parseReceiptText(shopeeReceiptText);
+  const item = parsed.items[0];
+
+  assert.equal(parsed.merchant, "Colgate Palmolive Official Shop");
+  assert.notEqual(parsed.merchant, "PT Shopee International Indonesia");
+  assert.equal(parsed.transactionDate, "2026-03-03");
+  assert.equal(parsed.totalAmount, 54122);
+  assert.notEqual(parsed.totalAmount, 1);
+  assert.notEqual(parsed.totalAmount, 77600);
+  assert.equal(parsed.category, "Kebutuhan Rumah");
+  assert.equal(item.name, "[TRIPLEPACK] Colgate Optic White Purple 100 g - Pasta Gigi Pemutih (3pcs)");
+  assert.equal(item.quantity, 1);
+  assert.equal(item.unitPrice, 77600);
+  assert.equal(item.totalPrice, 77600);
+});
+
+test("records Shopee total candidate debug with selected and rejected reasons", () => {
+  const parsed = parseReceiptText(shopeeReceiptText);
+  const candidates = parsed.totalCandidates ?? [];
+
+  assert.ok(candidates.some((candidate) => candidate.amount === 54122 && candidate.isSelected && candidate.sourceText === "Total Pembayaran Rp54.122"));
+  assert.ok(candidates.some((candidate) => candidate.amount === 77600 && !candidate.isSelected && candidate.reason.includes("subtotal")));
+  assert.ok(candidates.some((candidate) => candidate.amount === 1 && !candidate.isSelected && candidate.reason.includes("kuantitas")));
+  assert.ok(candidates.some((candidate) => candidate.amount === 1796 && !candidate.isSelected && candidate.reason.includes("pengiriman")));
+  assert.ok(candidates.some((candidate) => candidate.amount === 912 && !candidate.isSelected && candidate.reason.includes("layanan")));
+  assert.ok(candidates.some((candidate) => candidate.amount === -15000 && !candidate.isSelected && candidate.reason.includes("diskon")));
+  assert.ok(candidates.some((candidate) => candidate.amount === -9390 && !candidate.isSelected && candidate.reason.includes("diskon")));
 });

@@ -5,6 +5,7 @@ import {
   getGeminiCategoryClassification
 } from "@/lib/categories/category-classifier";
 import { ParsedReceipt } from "@/lib/parser/receipt-parser";
+import { parseReceiptDateText, type ReceiptDateDebug } from "@/lib/parser/receipt-date-parser";
 
 export async function extractReceiptWithAi(rawText: string): Promise<AiReceiptExtraction | null> {
   const provider = process.env.AI_EXTRACTOR_PROVIDER?.trim() || "gemini";
@@ -22,43 +23,24 @@ export async function extractReceiptWithAi(rawText: string): Promise<AiReceiptEx
   return null;
 }
 
-function parseIndonesianDateToIso(dateStr: string): string | null {
-  // If Gemini outputs 2001-05-26, but the receipt meant 01-05-2026 (DD-MM-YY)
-  // We can detect this if the "year" is 2000-2031, and the "day" is > 12.
-  const match = dateStr.match(/^20(\d{2})[\/\-](\d{2})[\/\-](\d{2})$/);
-  if (match) {
-    const yy = parseInt(match[1], 10);
-    const mm = match[2];
-    const dd = parseInt(match[3], 10);
+function normalizeForAiValidation(value: string) {
+  return value.toUpperCase().replace(/\s+/g, " ").trim();
+}
 
-    // If YY is <= 31 and DD >= 12, it's highly likely they were swapped (since months only go up to 12).
-    // Example: 2001-05-26 -> YY=01, DD=26. Real date should be 2026-05-01.
-    if (yy <= 31 && dd > 12) {
-      return `20${dd}-${mm}-${yy.toString().padStart(2, "0")}`;
-    }
+function isQuantityTotalSource(sourceText: string | null) {
+  if (!sourceText) {
+    return false;
   }
 
-  // Handle direct YY-MM-DD output if Gemini ignores YYYY-MM-DD format entirely
-  const matchShort = dateStr.match(/^(\d{2})[\/\-](\d{2})[\/\-](\d{2})$/);
-  if (matchShort) {
-    const p1 = parseInt(matchShort[1], 10);
-    const p3 = parseInt(matchShort[3], 10);
-    
-    if (p1 > 12 && p3 <= 31) {
-      // DD-MM-YY
-      return `20${p3}-${matchShort[2]}-${p1.toString().padStart(2, "0")}`;
-    } else if (p1 <= 31 && p3 > 12) {
-      // YY-MM-DD
-      return `20${p1}-${matchShort[2]}-${p3.toString().padStart(2, "0")}`;
-    }
-  }
+  const normalized = normalizeForAiValidation(sourceText);
 
-  return null;
+  return normalized.includes("TOTAL KUANTITAS") || normalized.includes("KUANTITAS") || normalized.includes("PRODUK");
 }
 
 export function validateAndMergeAiResult(aiResult: AiReceiptExtraction, fallbackResult: ParsedReceipt): ParsedReceipt {
   const warnings: string[] = [...(fallbackResult.warnings ?? []), ...(aiResult.warnings ?? [])];
   let confidence: "high" | "low" = "high";
+  const dateDebug: ReceiptDateDebug[] = [...(fallbackResult.dateDebug ?? [])];
 
   // Date Validation
   let transactionDate = aiResult.transactionDate.value ?? undefined;
@@ -67,16 +49,26 @@ export function validateAndMergeAiResult(aiResult: AiReceiptExtraction, fallback
       warnings.push("Tanggal transaksi kurang yakin. Mohon periksa kembali.");
       confidence = "low";
     }
-    // Check if it looks like DD/MM/YY parsed backward by Gemini
-    const fixedDate = parseIndonesianDateToIso(transactionDate);
-    if (fixedDate) {
-      transactionDate = fixedDate;
+
+    if (aiResult.transactionDate.sourceText) {
+      const sourceDate = parseReceiptDateText(aiResult.transactionDate.sourceText);
+      dateDebug.push(sourceDate.debug);
+
+      if (sourceDate.isoDate && sourceDate.isoDate !== transactionDate) {
+        transactionDate = sourceDate.isoDate;
+        warnings.push("Tanggal AI berbeda dari teks struk, memakai tanggal dari teks struk.");
+      }
     }
-    // Reject impossible dates
-    const year = parseInt(transactionDate.split("-")[0] || "0", 10);
-    if (year < 1990 || year > 2100) {
+
+    const parsedAiDate = parseReceiptDateText(transactionDate);
+    dateDebug.push(parsedAiDate.debug);
+
+    if (!parsedAiDate.isoDate) {
       transactionDate = fallbackResult.transactionDate;
       warnings.push("Tanggal transaksi tidak masuk akal, kembali ke hasil parser biasa.");
+      confidence = "low";
+    } else if (parsedAiDate.isoDate !== transactionDate) {
+      transactionDate = parsedAiDate.isoDate;
     }
   } else {
     transactionDate = fallbackResult.transactionDate;
@@ -91,9 +83,24 @@ export function validateAndMergeAiResult(aiResult: AiReceiptExtraction, fallback
 
   // Total Validation
   let totalAmount = aiResult.totalAmount.value ?? undefined;
+  const selectedFallbackTotal = fallbackResult.totalCandidates?.find((candidate) => candidate.isSelected);
+  const hasStrongEcommerceTotal = selectedFallbackTotal?.sourceText
+    ? normalizeForAiValidation(selectedFallbackTotal.sourceText).includes("TOTAL PEMBAYARAN")
+    : false;
+
   if (totalAmount !== undefined && totalAmount !== null) {
     if (aiResult.totalAmount.confidence < 0.8) {
       warnings.push("Total transaksi kurang yakin. Mohon periksa kembali.");
+      confidence = "low";
+    }
+
+    if (
+      fallbackResult.totalAmount !== undefined &&
+      hasStrongEcommerceTotal &&
+      (totalAmount !== fallbackResult.totalAmount || isQuantityTotalSource(aiResult.totalAmount.sourceText))
+    ) {
+      totalAmount = fallbackResult.totalAmount;
+      warnings.push("Total AI diganti dengan Total Pembayaran dari struk e-commerce.");
       confidence = "low";
     }
     
@@ -150,10 +157,12 @@ export function validateAndMergeAiResult(aiResult: AiReceiptExtraction, fallback
     merchant: merchant ?? undefined,
     transactionDate: transactionDate ?? undefined,
     totalAmount: totalAmount ?? undefined,
+    totalCandidates: fallbackResult.totalCandidates,
     category: selectedCategory.name,
     categoryConfidence: selectedCategory.confidence,
     categoryReason: selectedCategory.reason,
     categorySource: selectedCategory.source,
+    dateDebug: dateDebug.length > 0 ? dateDebug : undefined,
     items: aiResult.items.length > 0 ? aiResult.items.map(i => ({
       name: i.name,
       quantity: i.quantity ?? undefined,

@@ -51,7 +51,11 @@ const categoryRules: CategoryRule[] = [
       "kebutuhan rumah",
       "sabun",
       "deterjen",
-      "tissue"
+      "tissue",
+      "colgate",
+      "pasta gigi",
+      "sikat gigi",
+      "odol"
     ],
     reason: "Merchant atau item cocok dengan supermarket, minimarket, grocery, atau kebutuhan rumah."
   },
