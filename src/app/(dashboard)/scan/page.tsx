@@ -18,7 +18,7 @@ export default async function ScanPage({
 
   return (
     <>
-      <PageHeader title="Pindai Struk" description="Unggah foto atau PDF struk, periksa hasil OCR, lalu simpan transaksi." />
+      <PageHeader title="Pindai Struk" description="Input manual, unggah file, atau pindai struk dengan kamera lalu periksa sebelum menyimpan." />
       {params.error ? <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">{params.error}</p> : null}
       <ReceiptUploadForm categories={categories.map((category) => ({ id: category.id, name: category.name }))} />
     </>

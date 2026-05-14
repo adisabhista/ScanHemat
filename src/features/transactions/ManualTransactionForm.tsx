@@ -1,6 +1,5 @@
 "use client";
 
-import type { Category } from "@prisma/client";
 import { useMemo, useState } from "react";
 
 import { Button } from "@/components/ui/Button";
@@ -9,6 +8,11 @@ import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { createTransactionAction } from "@/features/transactions/actions";
 import { formatIndonesianDateLabel } from "@/lib/format/date";
+
+type CategoryOption = {
+  id: string;
+  name: string;
+};
 
 type ManualItem = {
   name: string;
@@ -21,7 +25,7 @@ function getTodayInputValue() {
   return new Date().toISOString().slice(0, 10);
 }
 
-export function ManualTransactionForm({ categories }: { categories: Category[] }) {
+export function ManualTransactionForm({ categories }: { categories: CategoryOption[] }) {
   const defaultCategory = categories.find((category) => category.name === "Lainnya") ?? categories[0];
   const [items, setItems] = useState<ManualItem[]>([]);
   const [transactionDate, setTransactionDate] = useState(getTodayInputValue());

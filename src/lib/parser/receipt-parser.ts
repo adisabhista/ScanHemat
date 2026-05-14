@@ -22,7 +22,18 @@ export type ParsedReceipt = {
   totalCandidates?: ReceiptTotalCandidate[];
   items: ParsedReceiptItem[];
   confidence?: "high" | "low";
+  fieldConfidences?: {
+    merchant?: number;
+    transactionDate?: number;
+    totalAmount?: number;
+  };
   warnings?: string[];
+  visionCorrections?: {
+    field: "merchant" | "transactionDate" | "totalAmount" | "items" | "category";
+    oldValue: string | number | null;
+    newValue: string | number | null;
+    reason: string;
+  }[];
   category?: TransactionCategoryName;
   categoryId?: string;
   categoryConfidence?: number;

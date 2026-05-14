@@ -21,6 +21,13 @@ export type AiTotalCandidate = {
   isSelected: boolean;
 };
 
+export type AiCorrection = {
+  field: "merchant" | "transactionDate" | "totalAmount" | "items" | "category";
+  oldValue: string | number | null;
+  newValue: string | number | null;
+  reason: string;
+};
+
 export type AiReceiptExtraction = {
   merchant: AiExtractedField<string | null>;
   transactionDate: AiExtractedField<string | null>;
@@ -34,3 +41,12 @@ export type AiReceiptExtraction = {
 export interface AiReceiptExtractor {
   extract(rawText: string): Promise<AiReceiptExtraction>;
 }
+
+export type AiReceiptVisionVerification = {
+  merchant: AiExtractedField<string | null>;
+  transactionDate: AiExtractedField<string | null>;
+  totalAmount: AiExtractedField<number | null>;
+  items: AiExtractedItem[];
+  warnings: string[];
+  corrections: AiCorrection[];
+};

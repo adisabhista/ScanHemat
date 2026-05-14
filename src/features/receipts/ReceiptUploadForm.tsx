@@ -2,11 +2,14 @@
 
 import dynamic from "next/dynamic";
 import Image from "next/image";
-import { type ChangeEvent, type FormEvent, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
+import { ManualTransactionForm } from "@/features/transactions/ManualTransactionForm";
 import type { ParsedReceipt } from "@/lib/parser/receipt-parser";
+import { CameraReceiptScanner } from "./CameraReceiptScanner";
+import { FileReceiptUploader } from "./FileReceiptUploader";
+import { ReceiptInputModeSelector, type ReceiptInputMode } from "./ReceiptInputModeSelector";
 
 type CategoryOption = {
   id: string;
@@ -28,29 +31,7 @@ type UploadResult = {
 
 type UploadErrorResult = {
   error?: string;
-  debug?: {
-    provider?: string;
-    code?: string;
-    message?: string;
-    missingEnvKeys?: string[];
-    presentEnvKeys?: string[];
-    errorName?: string;
-    googleCode?: number;
-    googleDetails?: string;
-    googleReason?: string;
-    googleMetadata?: Record<string, unknown>;
-    reason?: string;
-    credentialFilePresent?: boolean;
-    credentialFileReadable?: boolean;
-    credentialClientEmail?: string;
-    credentialProjectId?: string;
-    credentialType?: string;
-    credentialError?: string;
-    configuredProjectId?: string;
-    projectMismatch?: boolean;
-    processorName?: string;
-    deepError?: Record<string, unknown>;
-  };
+  debug?: Record<string, unknown>;
 };
 
 type OcrStage = "idle" | "uploading" | "ocr" | "processing" | "completed" | "failed";
@@ -91,6 +72,7 @@ function logOcrError(message: string, details?: unknown) {
 }
 
 export function ReceiptUploadForm({ categories }: { categories: CategoryOption[] }) {
+  const [mode, setMode] = useState<ReceiptInputMode>("file");
   const [result, setResult] = useState<UploadResult | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [error, setError] = useState("");
@@ -99,7 +81,6 @@ export function ReceiptUploadForm({ categories }: { categories: CategoryOption[]
   const [isProcessing, setIsProcessing] = useState(false);
   const [lastAction, setLastAction] = useState("Halaman scanner aktif");
   const abortControllerRef = useRef<AbortController | null>(null);
-  const fileInputMountedRef = useRef(false);
 
   useEffect(() => {
     logOcr("scanner rendered");
@@ -129,16 +110,16 @@ export function ReceiptUploadForm({ categories }: { categories: CategoryOption[]
     return allowedReceiptMimeTypes.includes(file.type);
   }
 
-  function handleFileInputRef(node: HTMLInputElement | null) {
-    if (node && !fileInputMountedRef.current) {
-      fileInputMountedRef.current = true;
-      setLastAction("Input file siap");
-      logOcr("file input mounted");
-    }
+  function handleModeChange(nextMode: ReceiptInputMode) {
+    setMode(nextMode);
+    setResult(null);
+    setError("");
+    setStage("idle");
+    setProgress(0);
+    setLastAction(`Mode ${nextMode} dipilih`);
   }
 
-  function handleFileChange(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0] ?? null;
+  function handleFileChange(file: File | null) {
     logOcr("file selected");
     setSelectedFile(file);
     setResult(null);
@@ -156,12 +137,6 @@ export function ReceiptUploadForm({ categories }: { categories: CategoryOption[]
     } else {
       setLastAction("Pilihan file dikosongkan");
     }
-  }
-
-  function handleUnexpectedSubmit(event: FormEvent<HTMLDivElement>) {
-    logOcr("form submit triggered");
-    event.preventDefault();
-    logOcr("preventDefault called");
   }
 
   async function uploadReceipt(file: File) {
@@ -266,9 +241,9 @@ export function ReceiptUploadForm({ categories }: { categories: CategoryOption[]
     await uploadReceipt(selectedFile);
   }
 
-  function handleInteractionTest() {
-    setLastAction("Tes interaksi berhasil");
-    logOcr("interaction test clicked");
+  async function handleCameraCapture(file: File) {
+    setSelectedFile(file);
+    await uploadReceipt(file);
   }
 
   function cancelOcr() {
@@ -295,83 +270,63 @@ export function ReceiptUploadForm({ categories }: { categories: CategoryOption[]
   return (
     <div className="grid gap-6">
       <Card>
-        <div className="grid gap-4" onSubmitCapture={handleUnexpectedSubmit}>
+        <div className="grid gap-4">
           {isDevelopment ? (
             <div className="grid gap-1 rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
               <p className="font-semibold text-slate-950">Halaman scanner aktif</p>
+              <p>Mode: {mode}</p>
               <p>File: {selectedFile?.name ?? "Belum ada file"}</p>
               <p>Jenis file: {selectedFile?.type ?? "-"}</p>
               <p>Ukuran file: {selectedFile ? getFileSizeLabel(selectedFile.size) : "-"}</p>
               <p>Aksi terakhir: {lastAction}</p>
               <p>Status proses: {debugProcessingState}</p>
-              <button
-                className="mt-2 w-fit rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
-                onClick={handleInteractionTest}
-                type="button"
-              >
-                Tes Interaksi
-              </button>
             </div>
           ) : null}
-          <label className="grid gap-2 text-sm font-medium text-slate-700">
-            <span>Struk</span>
-            <input
-              accept="image/jpeg,image/png,image/webp,application/pdf"
-              className="rounded-md border border-dashed border-slate-300 bg-slate-50 p-4 text-sm"
-              disabled={isProcessing}
-              onChange={handleFileChange}
-              ref={handleFileInputRef}
-              type="file"
-            />
-            <span className="text-sm font-normal text-slate-500">Unggah foto struk atau PDF struk.</span>
-            <span className="text-xs font-normal text-slate-500">Format yang didukung: JPG, PNG, WEBP, atau PDF.</span>
-          </label>
-          {selectedFile ? (
-            <div className="grid gap-2 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-              <p className="font-semibold text-slate-950">File dipilih</p>
-              <p>{selectedFile.name}</p>
-              <p>
-                <span className="font-medium">Jenis file:</span> {selectedFile.type || "Tidak diketahui"}
-              </p>
-              <p>
-                <span className="font-medium">Ukuran file:</span> {getFileSizeLabel(selectedFile.size)}
-              </p>
-            </div>
-          ) : null}
-          {progressLabel ? (
-            <div className="rounded-md border border-brand-100 bg-brand-50 p-3">
-              <div className="flex items-center justify-between gap-3 text-sm font-medium text-brand-700">
-                <span>{progressLabel}</span>
-                <span>{progress}%</span>
-              </div>
-              <div className="mt-2 h-2 rounded-full bg-white">
-                <div className="h-2 rounded-full bg-brand-600 transition-all" style={{ width: `${Math.min(progress, 100)}%` }} />
-              </div>
-            </div>
-          ) : null}
-          {error ? <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
-          <div className="flex flex-col gap-3 sm:flex-row">
-            <button
-              className="inline-flex min-h-10 items-center justify-center rounded-md bg-brand-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-700 disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={isProcessing}
-              onClick={handleScan}
-              type="button"
-            >
-              {isProcessing ? "Membaca struk..." : "Baca Struk"}
-            </button>
-            {isProcessing ? (
-              <Button onClick={cancelOcr} type="button" variant="secondary">
-                Batalkan
-              </Button>
-            ) : null}
-            {canRetry ? (
-              <Button onClick={retryOcr} type="button" variant="secondary">
-                Coba Lagi
-              </Button>
-            ) : null}
-          </div>
+          <ReceiptInputModeSelector disabled={isProcessing} mode={mode} onModeChange={handleModeChange} />
         </div>
       </Card>
+
+      {mode === "manual" ? <ManualTransactionForm categories={categories} /> : null}
+
+      {mode === "file" ? (
+        <FileReceiptUploader
+          canRetry={canRetry}
+          disabled={isProcessing}
+          error={error}
+          fileSizeLabel={selectedFile ? getFileSizeLabel(selectedFile.size) : "-"}
+          onCancel={cancelOcr}
+          onFileChange={handleFileChange}
+          onRetry={retryOcr}
+          onScan={handleScan}
+          progress={progress}
+          progressLabel={progressLabel}
+          selectedFile={selectedFile}
+        />
+      ) : null}
+
+      {mode === "camera" ? (
+        <>
+          <CameraReceiptScanner disabled={isProcessing} onCancel={() => handleModeChange("file")} onCapture={handleCameraCapture} />
+          {progressLabel || error ? (
+            <Card>
+              <div className="grid gap-3">
+                {progressLabel ? (
+                  <div className="rounded-md border border-brand-100 bg-brand-50 p-3">
+                    <div className="flex items-center justify-between gap-3 text-sm font-medium text-brand-700">
+                      <span>{progressLabel}</span>
+                      <span>{progress}%</span>
+                    </div>
+                    <div className="mt-2 h-2 rounded-full bg-white">
+                      <div className="h-2 rounded-full bg-brand-600 transition-all" style={{ width: `${Math.min(progress, 100)}%` }} />
+                    </div>
+                  </div>
+                ) : null}
+                {error ? <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
+              </div>
+            </Card>
+          ) : null}
+        </>
+      ) : null}
 
       {result ? (
         <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
@@ -381,20 +336,19 @@ export function ReceiptUploadForm({ categories }: { categories: CategoryOption[]
               <div className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">PDF struk sudah diproses di server.</div>
             ) : (
               <div className="mt-4 overflow-hidden rounded-md border border-slate-200 bg-slate-100">
-                <Image
-                  alt="Pratinjau struk"
-                  className="h-auto w-full object-contain"
-                  height={900}
-                  src={result.filePath}
-                  width={700}
-                />
+                <Image alt="Pratinjau struk" className="h-auto w-full object-contain" height={900} src={result.filePath} width={700} />
               </div>
             )}
             <pre className="mt-4 max-h-80 overflow-auto whitespace-pre-wrap rounded-md bg-slate-950 p-4 text-xs text-slate-100">
               {result.rawText || "Tidak ada teks terbaca."}
             </pre>
           </Card>
-          <TransactionReviewForm categories={categories} parsedReceipt={result.parsed} receiptId={result.receiptId} />
+          <TransactionReviewForm
+            categories={categories}
+            mimeType={result.mimeType}
+            parsedReceipt={result.parsed}
+            receiptId={result.receiptId}
+          />
         </div>
       ) : null}
     </div>

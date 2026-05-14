@@ -158,6 +158,11 @@ export function validateAndMergeAiResult(aiResult: AiReceiptExtraction, fallback
     transactionDate: transactionDate ?? undefined,
     totalAmount: totalAmount ?? undefined,
     totalCandidates: fallbackResult.totalCandidates,
+    fieldConfidences: {
+      merchant: aiResult.merchant.confidence,
+      transactionDate: aiResult.transactionDate.confidence,
+      totalAmount: aiResult.totalAmount.confidence
+    },
     category: selectedCategory.name,
     categoryConfidence: selectedCategory.confidence,
     categoryReason: selectedCategory.reason,

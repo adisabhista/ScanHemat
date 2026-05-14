@@ -7,12 +7,20 @@ import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
 import { createTransactionAction } from "@/features/transactions/actions";
+import { shouldSuggestVisionVerification } from "@/lib/ai/vision-verification";
+import { formatCurrency } from "@/lib/format/currency";
 import { formatIndonesianDateLabel } from "@/lib/format/date";
 import type { ParsedReceiptItem, ParsedReceipt } from "@/lib/parser/receipt-parser";
 
 type CategoryOption = {
   id: string;
   name: string;
+};
+
+type VisionVerifyResult = {
+  parsed: ParsedReceipt;
+  corrections?: ParsedReceipt["visionCorrections"];
+  error?: string;
 };
 
 function getTodayInputValue() {
@@ -22,16 +30,34 @@ function getTodayInputValue() {
 export function TransactionReviewForm({
   receiptId,
   parsedReceipt,
-  categories
+  categories,
+  mimeType
 }: {
   receiptId: string;
   parsedReceipt: ParsedReceipt;
   categories: CategoryOption[];
+  mimeType: string;
 }) {
   const defaultCategory = categories.find((category) => category.name === "Lainnya") ?? categories[0];
+  const [currentReceipt, setCurrentReceipt] = useState(parsedReceipt);
+  const [merchant, setMerchant] = useState(parsedReceipt.merchant ?? "");
   const [items, setItems] = useState<ParsedReceiptItem[]>(parsedReceipt.items ?? []);
   const [transactionDate, setTransactionDate] = useState(parsedReceipt.transactionDate ?? getTodayInputValue());
+  const [totalAmount, setTotalAmount] = useState(parsedReceipt.totalAmount?.toString() ?? "");
+  const [categoryId, setCategoryId] = useState(parsedReceipt.categoryId ?? defaultCategory?.id ?? "");
+  const [visionStatus, setVisionStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const [visionMessage, setVisionMessage] = useState("");
   const serializedItems = useMemo(() => JSON.stringify(items.filter((item) => item.name.trim())), [items]);
+  const shouldShowVisionAction = shouldSuggestVisionVerification(currentReceipt);
+
+  function applyParsedReceipt(nextReceipt: ParsedReceipt) {
+    setCurrentReceipt(nextReceipt);
+    setMerchant(nextReceipt.merchant ?? "");
+    setItems(nextReceipt.items ?? []);
+    setTransactionDate(nextReceipt.transactionDate ?? getTodayInputValue());
+    setTotalAmount(nextReceipt.totalAmount?.toString() ?? "");
+    setCategoryId(nextReceipt.categoryId ?? defaultCategory?.id ?? "");
+  }
 
   function updateItem(index: number, field: keyof ParsedReceiptItem, value: string) {
     setItems((current) =>
@@ -46,56 +72,115 @@ export function TransactionReviewForm({
     );
   }
 
+  async function verifyWithVision() {
+    setVisionStatus("loading");
+    setVisionMessage("AI Visual sedang menganalisis struk...");
+
+    try {
+      const response = await fetch(`/api/receipts/${receiptId}/vision-verify`, {
+        method: "POST"
+      });
+      const payload = (await response.json()) as VisionVerifyResult;
+
+      if (!response.ok) {
+        throw new Error(payload.error || "Analisis AI Visual gagal. Mohon periksa hasil secara manual.");
+      }
+
+      applyParsedReceipt(payload.parsed);
+      setVisionStatus("success");
+      setVisionMessage("AI Visual selesai menganalisis struk.");
+    } catch (error) {
+      setVisionStatus("error");
+      setVisionMessage(error instanceof Error ? error.message : "Analisis AI Visual gagal. Mohon periksa hasil secara manual.");
+    }
+  }
+
   const datePreview = formatIndonesianDateLabel(transactionDate);
+  const corrections = currentReceipt.visionCorrections ?? [];
 
   return (
     <Card>
       <h2 className="text-base font-semibold text-slate-950">Periksa Data Transaksi</h2>
       <p className="mt-1 text-sm text-slate-500">Ubah hasil pindai sebelum menyimpan transaksi.</p>
-      
-      {parsedReceipt.warnings && parsedReceipt.warnings.length > 0 && (
-        <div className="mt-4 rounded-md bg-amber-50 p-4 border border-amber-200">
-          <div className="flex">
-            <div className="ml-3">
-              <h3 className="text-sm font-medium text-amber-800">Perhatian</h3>
-              <div className="mt-2 text-sm text-amber-700">
-                <ul className="list-disc space-y-1 pl-5">
-                  {parsedReceipt.warnings.map((warning, idx) => (
-                    <li key={idx}>{warning}</li>
-                  ))}
-                </ul>
-              </div>
-            </div>
+
+      {currentReceipt.warnings && currentReceipt.warnings.length > 0 && (
+        <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 p-4">
+          <h3 className="text-sm font-medium text-amber-800">Perhatian</h3>
+          <div className="mt-2 text-sm text-amber-700">
+            <ul className="list-disc space-y-1 pl-5">
+              {currentReceipt.warnings.map((warning, idx) => (
+                <li key={idx}>{warning}</li>
+              ))}
+            </ul>
           </div>
         </div>
       )}
+
+      {shouldShowVisionAction ? (
+        <div className="mt-4 grid gap-3 rounded-md border border-brand-100 bg-brand-50 p-4 text-sm text-brand-800">
+          <p>Hasil kurang yakin. Anda dapat menganalisis ulang dengan AI Visual.</p>
+          {mimeType === "application/pdf" ? (
+            <p className="text-brand-700">Untuk PDF, AI Visual akan dicoba jika model mendukung analisis PDF.</p>
+          ) : null}
+          <Button disabled={visionStatus === "loading"} onClick={verifyWithVision} type="button" variant="secondary">
+            Analisis Ulang dengan AI Visual
+          </Button>
+        </div>
+      ) : null}
+
+      {visionMessage ? (
+        <p
+          className={`mt-4 rounded-md p-3 text-sm ${
+            visionStatus === "error" ? "bg-red-50 text-red-700" : "bg-emerald-50 text-emerald-700"
+          }`}
+        >
+          {visionMessage}
+        </p>
+      ) : null}
+
+      {corrections.length > 0 ? (
+        <div className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+          <h3 className="font-semibold text-slate-950">Saran AI Visual</h3>
+          <ul className="mt-2 list-disc space-y-1 pl-5">
+            {corrections.map((correction, index) => (
+              <li key={`${correction.field}-${index}`}>{formatCorrection(correction)}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
       <form action={createTransactionAction} className="mt-5 grid gap-4">
         <input name="receiptId" type="hidden" value={receiptId} />
         <input name="items" type="hidden" value={serializedItems} />
-        <Input defaultValue={parsedReceipt.merchant ?? ""} label="Merchant / Toko" name="merchant" placeholder="Nama toko" />
+        <Input
+          label="Merchant / Toko"
+          name="merchant"
+          onChange={(event) => setMerchant(event.target.value)}
+          placeholder="Nama toko"
+          value={merchant}
+        />
         <div>
           <Input
             value={transactionDate}
-            onChange={(e) => setTransactionDate(e.target.value)}
+            onChange={(event) => setTransactionDate(event.target.value)}
             label="Tanggal"
             name="transactionDate"
             required
             type="date"
           />
-          {datePreview ? (
-            <p className="mt-1 text-xs text-slate-500">Tanggal terpilih: {datePreview}</p>
-          ) : null}
+          {datePreview ? <p className="mt-1 text-xs text-slate-500">Tanggal terpilih: {datePreview}</p> : null}
         </div>
         <Input
-          defaultValue={parsedReceipt.totalAmount ?? ""}
           label="Total"
           min="0"
           name="totalAmount"
+          onChange={(event) => setTotalAmount(event.target.value)}
           required
           step="1"
           type="number"
+          value={totalAmount}
         />
-        <Select defaultValue={parsedReceipt.categoryId ?? defaultCategory?.id} label="Kategori" name="categoryId" required>
+        <Select value={categoryId} onChange={(event) => setCategoryId(event.target.value)} label="Kategori" name="categoryId" required>
           {categories.map((category) => (
             <option key={category.id} value={category.id}>
               {category.name}
@@ -153,4 +238,28 @@ export function TransactionReviewForm({
       </form>
     </Card>
   );
+}
+
+function formatCorrection(correction: NonNullable<ParsedReceipt["visionCorrections"]>[number]) {
+  const fieldLabel: Record<typeof correction.field, string> = {
+    merchant: "merchant",
+    transactionDate: "tanggal",
+    totalAmount: "total",
+    items: "item",
+    category: "kategori"
+  };
+
+  return `AI Visual menyarankan ${fieldLabel[correction.field]} ${formatCorrectionValue(correction.newValue)} karena ${correction.reason}`;
+}
+
+function formatCorrectionValue(value: string | number | null) {
+  if (value === null) {
+    return "-";
+  }
+
+  if (typeof value === "number") {
+    return formatCurrency(value);
+  }
+
+  return value;
 }
