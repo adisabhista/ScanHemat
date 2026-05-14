@@ -1,5 +1,6 @@
 import { classifyReceiptCategory, type TransactionCategoryName } from "@/lib/categories/category-classifier";
 import { isNonTransactionDateLine, parseReceiptDateText, type ReceiptDateDebug } from "@/lib/parser/receipt-date-parser";
+import type { ReceiptAudit } from "@/lib/audit/receipt-audit";
 
 export type ParsedReceiptItem = {
   name: string;
@@ -22,6 +23,7 @@ export type ParsedReceipt = {
   totalCandidates?: ReceiptTotalCandidate[];
   items: ParsedReceiptItem[];
   confidence?: "high" | "low";
+  audit?: ReceiptAudit;
   fieldConfidences?: {
     merchant?: number;
     transactionDate?: number;

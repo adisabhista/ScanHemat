@@ -97,6 +97,7 @@ export function TransactionReviewForm({
 
   const datePreview = formatIndonesianDateLabel(transactionDate);
   const corrections = currentReceipt.visionCorrections ?? [];
+  const audit = currentReceipt.audit;
 
   return (
     <Card>
@@ -147,6 +148,49 @@ export function TransactionReviewForm({
             ))}
           </ul>
         </div>
+      ) : null}
+
+      {audit ? (
+        <details className="mt-4 rounded-md border border-slate-200 bg-white p-4 text-sm text-slate-700">
+          <summary className="cursor-pointer list-none">
+            <span className="block font-semibold text-slate-950">Audit Struk</span>
+            <span className="mt-1 block text-slate-500">Lihat alasan AI memilih data ini.</span>
+          </summary>
+          <div className="mt-4 grid gap-4">
+            <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <h3 className="font-semibold text-slate-950">Ringkasan audit</h3>
+                <span className={`w-fit rounded-full px-2.5 py-1 text-xs font-semibold ${getAuditConfidenceClass(audit.confidence)}`}>
+                  {getAuditConfidenceLabel(audit.confidence)}
+                </span>
+              </div>
+              <p className="mt-2 leading-6">{audit.summary}</p>
+            </div>
+
+            <div className="grid gap-2">
+              <h3 className="font-semibold text-slate-950">Alasan pemilihan</h3>
+              <div className="grid gap-2">
+                {Object.entries(audit.selectedFields).map(([field, value]) =>
+                  value ? <AuditFieldRow field={field} key={field} value={value} /> : null
+                )}
+              </div>
+            </div>
+
+            <AuditCandidateList candidates={audit.acceptedCandidates} title="Kandidat diterima" />
+            <AuditCandidateList candidates={audit.rejectedCandidates} title="Kandidat ditolak" />
+
+            {audit.warnings.length > 0 ? (
+              <div className="grid gap-2">
+                <h3 className="font-semibold text-slate-950">Peringatan</h3>
+                <ul className="list-disc space-y-1 pl-5 text-amber-700">
+                  {audit.warnings.map((warning, index) => (
+                    <li key={`${warning}-${index}`}>{warning}</li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </div>
+        </details>
       ) : null}
 
       <form action={createTransactionAction} className="mt-5 grid gap-4">
@@ -238,6 +282,108 @@ export function TransactionReviewForm({
       </form>
     </Card>
   );
+}
+
+function AuditFieldRow({
+  field,
+  value
+}: {
+  field: string;
+  value: NonNullable<NonNullable<ParsedReceipt["audit"]>["selectedFields"][keyof NonNullable<ParsedReceipt["audit"]>["selectedFields"]]>;
+}) {
+  return (
+    <div className="rounded-md border border-slate-200 p-3">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p className="font-medium text-slate-950">{getAuditFieldLabel(field)}</p>
+          <p className="mt-1">{formatAuditValue(value.value)}</p>
+        </div>
+        <span className="text-xs text-slate-500">Keyakinan {Math.round(value.confidence * 100)}%</span>
+      </div>
+      {value.sourceText ? <p className="mt-2 text-xs text-slate-500">Sumber: {value.sourceText}</p> : null}
+      <p className="mt-2 text-sm">{value.reason}</p>
+    </div>
+  );
+}
+
+function AuditCandidateList({
+  candidates,
+  title
+}: {
+  candidates: NonNullable<ParsedReceipt["audit"]>["acceptedCandidates"];
+  title: string;
+}) {
+  if (candidates.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="grid gap-2">
+      <h3 className="font-semibold text-slate-950">{title}</h3>
+      <div className="grid gap-2">
+        {candidates.map((candidate, index) => (
+          <div className="rounded-md border border-slate-200 p-3" key={`${candidate.field}-${candidate.sourceText}-${index}`}>
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+              <p className="font-medium text-slate-950">{getAuditFieldLabel(candidate.field)}</p>
+              <span className="text-xs text-slate-500">{formatAuditValue(candidate.value)}</span>
+            </div>
+            <p className="mt-1 text-xs text-slate-500">{candidate.sourceText}</p>
+            <p className="mt-2">{candidate.reason}</p>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function getAuditFieldLabel(field: string) {
+  const labels: Record<string, string> = {
+    merchant: "Merchant",
+    transactionDate: "Tanggal",
+    totalAmount: "Total",
+    category: "Kategori",
+    discount: "Diskon",
+    shipping: "Pengiriman/Biaya",
+    item: "Item"
+  };
+
+  return labels[field] ?? field;
+}
+
+function getAuditConfidenceLabel(confidence: NonNullable<ParsedReceipt["audit"]>["confidence"]) {
+  if (confidence === "high") {
+    return "Kepercayaan tinggi";
+  }
+
+  if (confidence === "medium") {
+    return "Kepercayaan sedang";
+  }
+
+  return "Kepercayaan rendah";
+}
+
+function getAuditConfidenceClass(confidence: NonNullable<ParsedReceipt["audit"]>["confidence"]) {
+  if (confidence === "high") {
+    return "bg-emerald-50 text-emerald-700";
+  }
+
+  if (confidence === "medium") {
+    return "bg-amber-50 text-amber-700";
+  }
+
+  return "bg-red-50 text-red-700";
+}
+
+function formatAuditValue(value: string | number | null) {
+  if (value === null) {
+    return "-";
+  }
+
+  if (typeof value === "number") {
+    return formatCurrency(value);
+  }
+
+  return value;
 }
 
 function formatCorrection(correction: NonNullable<ParsedReceipt["visionCorrections"]>[number]) {

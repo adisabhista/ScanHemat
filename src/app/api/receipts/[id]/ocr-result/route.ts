@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { requireUserId } from "@/lib/auth";
+import { generateReceiptAudit } from "@/lib/audit/receipt-audit";
 import { parseReceiptText } from "@/lib/parser/receipt-parser";
 import { prisma } from "@/lib/prisma";
 
@@ -32,6 +33,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
     }
 
     const parsedReceipt = parseReceiptText(parsed.data.rawText);
+    parsedReceipt.audit = generateReceiptAudit({ rawText: parsed.data.rawText, parsedReceipt });
     const updatedReceipt = await prisma.receipt.update({
       where: { id: receipt.id },
       data: {

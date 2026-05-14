@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { getAvailableCategories } from "@/features/categories/queries";
 import { requireUserId } from "@/lib/auth";
 import { extractReceiptWithAi, validateAndMergeAiResult } from "@/lib/ai/index";
+import { generateReceiptAudit } from "@/lib/audit/receipt-audit";
 import {
   findCategoryOptionByName,
   getDefaultCategoryOption,
@@ -165,6 +166,8 @@ export async function POST(request: Request) {
           reason: finalReceipt.categoryReason
         });
       }
+
+      finalReceipt.audit = generateReceiptAudit({ rawText, parsedReceipt: finalReceipt });
 
       const updatedReceipt = await prisma.receipt.update({
         where: { id: receipt.id },

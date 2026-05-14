@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { requireUserId } from "@/lib/auth";
 import { GeminiVisionReceiptVerifier } from "@/lib/ai/providers/gemini-vision-receipt-verifier";
 import { mergeVisionVerificationResult } from "@/lib/ai/vision-verification";
+import { generateReceiptAudit } from "@/lib/audit/receipt-audit";
 import type { ParsedReceipt } from "@/lib/parser/receipt-parser";
 import { prisma } from "@/lib/prisma";
 import { receiptStorage } from "@/lib/storage/local-storage-service";
@@ -51,6 +52,7 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
       currentExtraction
     });
     const mergedReceipt = mergeVisionVerificationResult(currentExtraction, verification);
+    mergedReceipt.audit = generateReceiptAudit({ rawText: receipt.rawText, parsedReceipt: mergedReceipt });
 
     const updatedReceipt = await prisma.receipt.update({
       where: { id: receipt.id },
