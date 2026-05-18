@@ -1,4 +1,5 @@
 import type { TransactionFilters } from "@/features/transactions/period-filter";
+import type { ReminderType } from "@prisma/client";
 
 export type AssistantMessage = {
   role: "user" | "assistant";
@@ -17,6 +18,8 @@ export type AssistantIntent =
   | "small_frequent_transactions"
   | "unusual_transactions"
   | "savings_advice"
+  | "upcoming_reminders"
+  | "upcoming_expense_summary"
   | "follow_up";
 
 export type AssistantIntentResult = {
@@ -27,6 +30,8 @@ export type AssistantIntentResult = {
   merchantName?: string;
   itemKeyword?: string;
   thresholdAmount?: number;
+  reminderPeriod?: "week" | "month" | "next30days" | "all";
+  reminderType?: ReminderType;
 };
 
 export type AssistantPeriod = TransactionFilters & {
@@ -45,7 +50,9 @@ export type AssistantToolName =
   | "getItemPriceHistory"
   | "getBudgetStatus"
   | "getSmallFrequentTransactions"
-  | "getUnusualTransactions";
+  | "getUnusualTransactions"
+  | "getUpcomingReminders"
+  | "getUpcomingExpenseSummary";
 
 export type AssistantContext = {
   intent: AssistantIntent;

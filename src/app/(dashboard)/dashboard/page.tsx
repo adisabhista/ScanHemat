@@ -8,6 +8,8 @@ import { DashboardPeriodFilter } from "@/features/dashboard/DashboardPeriodFilte
 import { MonthlyBreakdownChart } from "@/features/dashboard/MonthlyBreakdownChart";
 import { RecentTransactions } from "@/features/dashboard/RecentTransactions";
 import { getBudgets } from "@/features/budgets/queries";
+import { getReminderNotifications, getUpcomingRemindersForDashboard } from "@/features/reminders/queries";
+import { UpcomingRemindersWidget } from "@/features/reminders/UpcomingRemindersWidget";
 import { normalizeTransactionFilters, normalizeTransactionPeriod } from "@/features/transactions/period-filter";
 import { getFilterLabel, getMonthRange, getTransactions, getYearRange } from "@/features/transactions/queries";
 import { requireUserId } from "@/lib/auth";
@@ -59,10 +61,12 @@ export default async function DashboardPage({
   const budgetYear = filters.period === "month" ? filters.year ?? currentYear : currentYear;
   const { start, end } = getMonthRange(budgetYear, budgetMonth);
 
-  const [filteredTransactions, monthlyBudgets, budgetMonthTransactions] = await Promise.all([
+  const [filteredTransactions, monthlyBudgets, budgetMonthTransactions, upcomingReminders, reminderNotifications] = await Promise.all([
     getTransactions(userId, filters),
     getBudgets(userId, budgetYear, budgetMonth),
-    getTransactions(userId, { period: "month", year: budgetYear, month: budgetMonth })
+    getTransactions(userId, { period: "month", year: budgetYear, month: budgetMonth }),
+    getUpcomingRemindersForDashboard(userId, now, 3),
+    getReminderNotifications(userId, now)
   ]);
 
   const totalExpenses = filteredTransactions.reduce((sum, transaction) => sum + Number(transaction.totalAmount), 0);
@@ -159,6 +163,8 @@ export default async function DashboardPage({
           </div>
         </Card>
       </div>
+
+      <UpcomingRemindersWidget notifications={reminderNotifications} reminders={upcomingReminders} />
 
       {filters.period === "year" ? (
         <Card>

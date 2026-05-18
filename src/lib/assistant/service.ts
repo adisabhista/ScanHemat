@@ -9,12 +9,15 @@ import {
   getMerchantBreakdown,
   getMonthlyBreakdown,
   getRecentTransactions,
+  getUpcomingExpenseSummary,
+  getUpcomingReminders,
   getSmallFrequentTransactions,
   getSpendingSummary,
   getTransactionsByMerchant,
   getUnusualTransactions
 } from "./tools";
 import type { AssistantContext, AssistantMessage, AssistantToolName } from "./types";
+import { formatAssistantCurrency, formatAssistantDate } from "./format";
 
 function hasData(value: unknown): boolean {
   if (Array.isArray(value)) {
@@ -154,6 +157,24 @@ export async function buildAssistantContext(userId: string, messages: AssistantM
   if (intentResult.intent === "unusual_transactions") {
     tools.push("getUnusualTransactions");
     data.unusualTransactions = await getUnusualTransactions(userId, filters);
+  }
+
+  if (intentResult.intent === "upcoming_reminders") {
+    tools.push("getUpcomingExpenseSummary", "getUpcomingReminders");
+    data.reminderSummary = await getUpcomingExpenseSummary(userId, now);
+    data.reminders = await getUpcomingReminders(
+      userId,
+      {
+        period: intentResult.reminderPeriod ?? "next30days",
+        type: intentResult.reminderType
+      },
+      now
+    );
+  }
+
+  if (intentResult.intent === "upcoming_expense_summary") {
+    tools.push("getUpcomingExpenseSummary");
+    data.reminderSummary = await getUpcomingExpenseSummary(userId, now);
   }
 
   if (intentResult.intent === "savings_advice") {
@@ -318,6 +339,39 @@ export function buildDeterministicAssistantAnswer(context: AssistantContext) {
     const topCategories = categories.slice(0, 3).map((category) => category.categoryName).join(", ");
 
     return `Area yang bisa diperiksa untuk hemat bulan depan: ${topCategories}. Mulai dengan menetapkan batas belanja untuk kategori terbesar dan kurangi transaksi kecil yang tidak wajib.`;
+  }
+
+  if (context.intent === "upcoming_reminders" && Array.isArray(context.data.reminders)) {
+    const reminders = context.data.reminders as {
+      title: string;
+      dueDate: string;
+      amount: number | null;
+      countdownLabel: string;
+      type: string;
+    }[];
+    const summary = context.data.reminderSummary as { thisMonthAmount?: number; next30DaysAmount?: number; activeReminderCount?: number } | undefined;
+
+    if (reminders.length === 0) {
+      return "Tidak ada pengingat dalam waktu dekat.";
+    }
+
+    const total = reminders.reduce((sum, reminder) => sum + (reminder.amount ?? 0), 0);
+    const rows = reminders
+      .slice(0, 10)
+      .map((reminder, index) => `${index + 1}. ${reminder.title} - ${reminder.amount ? formatAssistantCurrency(reminder.amount) : "Tanpa estimasi"} - ${formatAssistantDate(reminder.dueDate)} (${reminder.countdownLabel})`);
+
+    return `Ada ${summary?.activeReminderCount ?? reminders.length} pengingat aktif dengan estimasi total ${formatAssistantCurrency(total)}:\n${rows.join("\n")}`;
+  }
+
+  if (context.intent === "upcoming_expense_summary" && context.data.reminderSummary && typeof context.data.reminderSummary === "object") {
+    const summary = context.data.reminderSummary as {
+      next30DaysAmount?: number;
+      thisMonthAmount?: number;
+      activeReminderCount?: number;
+      overdueReminderCount?: number;
+    };
+
+    return `Estimasi pengeluaran wajib 30 hari ke depan ${formatAssistantCurrency(summary.next30DaysAmount ?? 0)}. Bulan ini ${formatAssistantCurrency(summary.thisMonthAmount ?? 0)} dari ${summary.activeReminderCount ?? 0} pengingat aktif, dengan ${summary.overdueReminderCount ?? 0} yang sudah lewat.`;
   }
 
   return "Data transaksi belum cukup untuk membuat analisis yang akurat.";

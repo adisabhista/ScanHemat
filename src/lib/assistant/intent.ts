@@ -1,4 +1,5 @@
 import type { AssistantIntent, AssistantIntentResult, AssistantMessage } from "./types";
+import { ReminderType } from "@prisma/client";
 
 const knownMerchants = [
   "shopee",
@@ -74,6 +75,27 @@ export function classifyAssistantIntent(message: string): AssistantIntentResult 
   const normalized = normalizeQuestion(message);
   const thresholdAmount = parseAmount(normalized);
 
+  if (/\b(estimasi|total|berapa)\b/.test(normalized) && /\b(pengeluaran wajib|pengingat|jatuh tempo|30 hari)\b/.test(normalized)) {
+    return {
+      intent: "upcoming_expense_summary",
+      reminderPeriod: normalized.includes("bulan") ? "month" : normalized.includes("minggu") ? "week" : "next30days"
+    };
+  }
+
+  if (/\b(pengingat|jatuh tempo|langganan|subscription|sim|stnk|pajak kendaraan|garansi|lisensi|license|dokumen|pengeluaran wajib)\b/.test(normalized)) {
+    return {
+      intent: "upcoming_reminders",
+      reminderPeriod: normalized.includes("minggu")
+        ? "week"
+        : normalized.includes("bulan")
+          ? "month"
+          : normalized.includes("semua")
+            ? "all"
+            : "next30days",
+      reminderType: inferReminderType(normalized)
+    };
+  }
+
   if (/\b(anggaran|budget)\b/.test(normalized)) {
     return { intent: "budget_status" };
   }
@@ -120,6 +142,19 @@ export function classifyAssistantIntent(message: string): AssistantIntentResult 
   }
 
   return { intent: "spending_summary" };
+}
+
+function inferReminderType(normalized: string) {
+  if (/\blangganan|subscription|premium|youtube|netflix|spotify\b/.test(normalized)) return ReminderType.SUBSCRIPTION;
+  if (/\btagihan|internet|listrik|air|pdam\b/.test(normalized)) return ReminderType.BILL;
+  if (/\bpajak kendaraan|pajak motor|pajak mobil\b/.test(normalized)) return ReminderType.VEHICLE_TAX;
+  if (/\bstnk\b/.test(normalized)) return ReminderType.STNK;
+  if (/\bsim\b/.test(normalized)) return ReminderType.SIM;
+  if (/\bgaransi\b/.test(normalized)) return ReminderType.WARRANTY;
+  if (/\blisensi|license|domain|software\b/.test(normalized)) return ReminderType.LICENSE;
+  if (/\bdokumen|paspor|sertifikat\b/.test(normalized)) return ReminderType.DOCUMENT;
+
+  return undefined;
 }
 
 export function isFollowUpQuestion(normalizedMessage: string) {

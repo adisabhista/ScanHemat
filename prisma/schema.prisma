@@ -23,6 +23,7 @@ model User {
   receipts      Receipt[]
   transactions  Transaction[]
   budgets       Budget[]
+  reminders     Reminder[]
 }
 
 model Account {
@@ -149,6 +150,29 @@ model Budget {
   @@index([userId, year, month])
 }
 
+model Reminder {
+  id                  String         @id @default(cuid())
+  userId              String
+  title               String
+  type                ReminderType
+  amount              Int?
+  dueDate             DateTime
+  reminderOffsets     Int[]          @default([])
+  repeatType          RepeatType     @default(NONE)
+  status              ReminderStatus @default(ACTIVE)
+  notes               String?        @db.Text
+  relatedMerchant     String?
+  relatedDocumentName String?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  user                User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, dueDate])
+  @@index([userId, status])
+  @@index([userId, type])
+}
+
 enum ReceiptStatus {
   UPLOADED
   OCR_PROCESSING
@@ -161,4 +185,31 @@ enum TransactionSource {
   MANUAL
   RECEIPT_OCR
   PDF_OCR
+}
+
+enum ReminderType {
+  SUBSCRIPTION
+  BILL
+  VEHICLE_TAX
+  STNK
+  SIM
+  WARRANTY
+  LICENSE
+  DOCUMENT
+  OTHER
+}
+
+enum RepeatType {
+  NONE
+  WEEKLY
+  MONTHLY
+  YEARLY
+  CUSTOM
+}
+
+enum ReminderStatus {
+  ACTIVE
+  DONE
+  DISMISSED
+  EXPIRED
 }

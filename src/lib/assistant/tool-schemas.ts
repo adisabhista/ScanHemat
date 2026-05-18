@@ -10,7 +10,9 @@ export const assistantToolNames = [
   "getRecentTransactions",
   "getSmallFrequentTransactions",
   "getBudgetStatus",
-  "getItemPriceHistory"
+  "getItemPriceHistory",
+  "getUpcomingReminders",
+  "getUpcomingExpenseSummary"
 ] as const;
 
 export type AssistantFunctionToolName = (typeof assistantToolNames)[number];
@@ -52,6 +54,12 @@ export const budgetStatusArgsSchema = z.object({
 export const itemPriceHistoryArgsSchema = z.object({
   keyword: z.string().trim().min(1).max(100),
   limit: z.coerce.number().int().min(1).max(20).optional()
+});
+export const upcomingRemindersArgsSchema = z.object({
+  period: z.enum(["week", "month", "next30days", "all"]).default("next30days"),
+  type: z
+    .enum(["SUBSCRIPTION", "BILL", "VEHICLE_TAX", "STNK", "SIM", "WARRANTY", "LICENSE", "DOCUMENT", "OTHER"])
+    .optional()
 });
 
 const periodProperties = {
@@ -154,6 +162,29 @@ export const assistantFunctionDeclarations: FunctionDeclaration[] = [
         limit: { type: "number", description: "Maximum number of item rows to return." }
       },
       required: ["keyword"]
+    }
+  },
+  {
+    name: "getUpcomingReminders",
+    description: "Get active upcoming reminders for subscriptions, bills, vehicle tax, STNK, SIM, warranties, licenses, documents, and other obligations.",
+    parametersJsonSchema: {
+      type: "object",
+      properties: {
+        period: { type: "string", enum: ["week", "month", "next30days", "all"], description: "Reminder period to query." },
+        type: {
+          type: "string",
+          enum: ["SUBSCRIPTION", "BILL", "VEHICLE_TAX", "STNK", "SIM", "WARRANTY", "LICENSE", "DOCUMENT", "OTHER"],
+          description: "Optional reminder type filter."
+        }
+      }
+    }
+  },
+  {
+    name: "getUpcomingExpenseSummary",
+    description: "Get mandatory upcoming expense totals and reminder counts.",
+    parametersJsonSchema: {
+      type: "object",
+      properties: {}
     }
   }
 ];

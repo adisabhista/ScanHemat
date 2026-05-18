@@ -11,6 +11,7 @@ const navItems = [
   { href: SCAN_RECEIPT_ROUTE, label: "Pindai Struk" },
   { href: "/transactions", label: "Transaksi" },
   { href: "/budgets", label: "Anggaran" },
+  { href: "/reminders", label: "Pengingat" },
   { href: "/categories", label: "Kategori" },
   { href: "/settings", label: "Pengaturan" }
 ];

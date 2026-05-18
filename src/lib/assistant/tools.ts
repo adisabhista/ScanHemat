@@ -2,6 +2,10 @@ import { Prisma } from "@prisma/client";
 
 import { normalizeTransactionFilters, type TransactionFilters } from "@/features/transactions/period-filter";
 import { getFilterLabel, getTransactionDateRange } from "@/features/transactions/queries";
+import {
+  getUpcomingExpenseSummary as getReminderUpcomingExpenseSummary,
+  getUpcomingRemindersForAssistant
+} from "@/features/reminders/queries";
 import { prisma } from "@/lib/prisma";
 import { formatAssistantCurrency, formatAssistantDate } from "./format";
 import {
@@ -15,6 +19,7 @@ import {
   recentTransactionsArgsSchema,
   smallFrequentTransactionsArgsSchema,
   spendingSummaryArgsSchema,
+  upcomingRemindersArgsSchema,
   type AssistantFunctionToolName
 } from "./tool-schemas";
 
@@ -479,6 +484,18 @@ export async function getUnusualTransactions(userId: string, filters: Transactio
   return buildUnusualTransactions(allTransactions, currentTransactions);
 }
 
+export async function getUpcomingReminders(
+  userId: string,
+  args: { period: "week" | "month" | "next30days" | "all"; type?: Parameters<typeof getUpcomingRemindersForAssistant>[1]["type"] },
+  now = new Date()
+) {
+  return getUpcomingRemindersForAssistant(userId, args, now);
+}
+
+export async function getUpcomingExpenseSummary(userId: string, now = new Date()) {
+  return getReminderUpcomingExpenseSummary(userId, now);
+}
+
 export function isAssistantFunctionToolName(name: string): name is AssistantFunctionToolName {
   return assistantToolNames.includes(name as AssistantFunctionToolName);
 }
@@ -566,6 +583,15 @@ export async function executeAssistantTool(userId: string, name: string, args: u
       remainingAmount,
       status
     }));
+  }
+
+  if (name === "getUpcomingReminders") {
+    const parsed = upcomingRemindersArgsSchema.parse(args);
+    return getUpcomingReminders(userId, parsed, now);
+  }
+
+  if (name === "getUpcomingExpenseSummary") {
+    return getUpcomingExpenseSummary(userId, now);
   }
 
   const parsed = itemPriceHistoryArgsSchema.parse(args);
