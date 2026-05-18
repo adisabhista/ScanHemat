@@ -17,7 +17,7 @@ export default async function DashboardLayout({
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-slate-50 text-slate-950 dark:bg-slate-950 dark:text-slate-100">
       <AppSidebar userName={session.user.name ?? session.user.email} />
       <MobileNav />
       <main className="px-4 py-6 lg:ml-64 lg:px-8">

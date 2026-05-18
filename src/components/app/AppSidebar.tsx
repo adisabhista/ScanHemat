@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
 
+import { ThemeToggle } from "@/components/theme/ThemeToggle";
 import { SCAN_RECEIPT_ROUTE } from "@/lib/routes";
 
 const navItems = [
@@ -20,10 +21,10 @@ export function AppSidebar({ userName }: { userName?: string | null }) {
   const pathname = usePathname();
 
   return (
-    <aside className="hidden min-h-screen w-64 border-r border-slate-200 bg-white lg:fixed lg:inset-y-0 lg:flex lg:flex-col">
-      <div className="border-b border-slate-200 px-6 py-5">
-        <p className="text-lg font-bold text-slate-950">ScanHemat</p>
-        <p className="mt-1 truncate text-sm text-slate-500">{userName ?? "Pengguna"}</p>
+    <aside className="hidden min-h-screen w-64 border-r border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950 lg:fixed lg:inset-y-0 lg:flex lg:flex-col">
+      <div className="border-b border-slate-200 px-6 py-5 dark:border-slate-800">
+        <p className="text-lg font-bold text-slate-950 dark:text-slate-50">ScanHemat</p>
+        <p className="mt-1 truncate text-sm text-slate-500 dark:text-slate-400">{userName ?? "Pengguna"}</p>
       </div>
       <nav className="flex-1 space-y-1 px-3 py-4">
         {navItems.map((item) => {
@@ -34,7 +35,9 @@ export function AppSidebar({ userName }: { userName?: string | null }) {
               key={item.href}
               href={item.href}
               className={`block rounded-md px-3 py-2 text-sm font-medium transition ${
-                active ? "bg-brand-50 text-brand-700" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                active
+                  ? "bg-brand-50 text-brand-700 dark:bg-brand-500/15 dark:text-brand-100"
+                  : "text-slate-600 hover:bg-slate-50 hover:text-slate-900 dark:text-slate-300 dark:hover:bg-slate-900 dark:hover:text-slate-50"
               }`}
             >
               {item.label}
@@ -42,9 +45,10 @@ export function AppSidebar({ userName }: { userName?: string | null }) {
           );
         })}
       </nav>
-      <div className="border-t border-slate-200 p-3">
+      <div className="space-y-3 border-t border-slate-200 p-3 dark:border-slate-800">
+        <ThemeToggle />
         <button
-          className="w-full rounded-md px-3 py-2 text-left text-sm font-medium text-slate-600 hover:bg-slate-50"
+          className="w-full rounded-md px-3 py-2 text-left text-sm font-medium text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-900"
           onClick={() => signOut({ callbackUrl: "/login" })}
           type="button"
         >
