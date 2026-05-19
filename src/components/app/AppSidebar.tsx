@@ -50,7 +50,7 @@ export function AppSidebar({
       <div className={`border-b border-slate-200 dark:border-slate-800 ${isCollapsed ? "px-3 py-4" : "px-5 py-5"}`}>
         <div className={`flex items-center ${isCollapsed ? "justify-center" : "justify-between gap-3"}`}>
           <div className={`flex min-w-0 items-center ${isCollapsed ? "justify-center" : "gap-3"}`}>
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-brand-600 text-sm font-bold text-white shadow-sm shadow-brand-900/20">
+            <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-brand-600 text-sm font-bold text-white shadow-sm shadow-brand-900/20">
               {isCollapsed ? "SH" : <ScanReceiptIcon className="size-5" />}
             </div>
             {!isCollapsed ? (
@@ -90,7 +90,7 @@ export function AppSidebar({
         <ThemeToggle collapsed={isCollapsed} />
         <button
           aria-label="Keluar"
-          className={`group relative flex min-h-11 w-full items-center gap-3 rounded-lg text-sm font-semibold text-slate-600 transition hover:bg-slate-50 hover:text-slate-950 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 focus:ring-offset-white dark:text-slate-300 dark:hover:bg-slate-900 dark:hover:text-slate-50 dark:focus:ring-offset-slate-950 ${
+          className={`group relative flex min-h-11 w-full items-center gap-3 rounded-xl text-sm font-semibold text-slate-600 transition hover:bg-slate-50 hover:text-slate-950 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 focus:ring-offset-white dark:text-slate-300 dark:hover:bg-slate-900 dark:hover:text-slate-50 dark:focus:ring-offset-slate-950 ${
             isCollapsed ? "justify-center px-2" : "px-3"
           }`}
           onClick={() => signOut({ callbackUrl: "/login" })}
@@ -119,7 +119,7 @@ function CollapseButton({ label, onClick }: { label: string; onClick: () => void
   return (
     <button
       aria-label={label}
-      className="group relative flex size-10 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-950 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 focus:ring-offset-white dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300 dark:hover:bg-slate-900 dark:hover:text-slate-50 dark:focus:ring-offset-slate-950"
+      className="group relative flex size-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50 hover:text-slate-950 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 focus:ring-offset-white dark:border-slate-800 dark:bg-slate-950 dark:text-slate-300 dark:hover:bg-slate-900 dark:hover:text-slate-50 dark:focus:ring-offset-slate-950"
       onClick={onClick}
       title={label}
       type="button"

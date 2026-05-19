@@ -248,7 +248,7 @@ export function ReminderForm({
           </div>
         </fieldset>
         <Input
-          label="Merchant"
+          label="Toko"
           name="relatedMerchant"
           onChange={(event) => updateValue("relatedMerchant", event.target.value)}
           value={values.relatedMerchant ?? ""}

@@ -2,11 +2,16 @@ import Link from "next/link";
 
 import { PageHeader } from "@/components/app/PageHeader";
 import { Card } from "@/components/ui/Card";
+import { DataCard } from "@/components/ui/DataCard";
+import { MetricCard } from "@/components/ui/MetricCard";
+import { QuickActionButton } from "@/components/ui/QuickActionButton";
+import { StatusBadge } from "@/components/ui/StatusBadge";
 import { BudgetProgressList } from "@/features/dashboard/BudgetProgressList";
 import { CategoryChart } from "@/features/dashboard/CategoryChart";
 import { DashboardPeriodFilter } from "@/features/dashboard/DashboardPeriodFilter";
 import { MonthlyBreakdownChart } from "@/features/dashboard/MonthlyBreakdownChart";
 import { RecentTransactions } from "@/features/dashboard/RecentTransactions";
+import { getDashboardInsight } from "@/features/dashboard/insights";
 import { getBudgets } from "@/features/budgets/queries";
 import { getReminderNotifications, getUpcomingRemindersForDashboard } from "@/features/reminders/queries";
 import { UpcomingRemindersWidget } from "@/features/reminders/UpcomingRemindersWidget";
@@ -70,12 +75,21 @@ export default async function DashboardPage({
   ]);
 
   const totalExpenses = filteredTransactions.reduce((sum, transaction) => sum + Number(transaction.totalAmount), 0);
-  const categoryTotals = filteredTransactions.reduce<Record<string, number>>((totals, transaction) => {
-    totals[transaction.category.name] = (totals[transaction.category.name] ?? 0) + Number(transaction.totalAmount);
+  const categoryTotals = filteredTransactions.reduce<Record<string, { id: string; name: string; total: number }>>((totals, transaction) => {
+    const current = totals[transaction.categoryId] ?? {
+      id: transaction.categoryId,
+      name: transaction.category.name,
+      total: 0
+    };
+    totals[transaction.categoryId] = {
+      ...current,
+      total: current.total + Number(transaction.totalAmount)
+    };
     return totals;
   }, {});
-  const chartData = Object.entries(categoryTotals).map(([name, total]) => ({ name, total }));
-  const highestCategory = chartData.sort((a, b) => b.total - a.total)[0];
+  const chartData = Object.values(categoryTotals);
+  const highestCategory = [...chartData].sort((a, b) => b.total - a.total)[0];
+  const dashboardInsight = getDashboardInsight(chartData, totalExpenses);
   const budgetItems = monthlyBudgets.map((budget) => ({
     categoryName: budget.category.name,
     budgetAmount: Number(budget.amount),
@@ -103,15 +117,15 @@ export default async function DashboardPage({
     <>
       <PageHeader
         title="Dasbor"
-        description="Ringkasan pengeluaran, kategori, dan anggaran."
+        description="Pantau pola pengeluaran, prioritas kategori, anggaran, dan pengingat penting dalam satu tempat."
         action={
           <div className="flex flex-col gap-2 sm:flex-row">
-            <Link className="inline-flex min-h-10 items-center justify-center rounded-md bg-brand-600 px-4 py-2 text-sm font-semibold text-white hover:bg-brand-700" href={SCAN_RECEIPT_ROUTE}>
+            <QuickActionButton href={SCAN_RECEIPT_ROUTE} icon={<ReceiptIcon />}>
               Pindai Struk Baru
-            </Link>
-            <Link className="inline-flex min-h-10 items-center justify-center rounded-md border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50" href={NEW_TRANSACTION_ROUTE}>
+            </QuickActionButton>
+            <QuickActionButton href={NEW_TRANSACTION_ROUTE} icon={<PlusIcon />} variant="secondary">
               Tambah Manual
-            </Link>
+            </QuickActionButton>
           </div>
         }
       />
@@ -124,66 +138,131 @@ export default async function DashboardPage({
         selectedYear={filters.year ?? currentYear}
       />
 
+      <Card className={`border-l-4 ${dashboardInsight.tone === "warning" ? "border-l-amber-400" : dashboardInsight.tone === "success" ? "border-l-brand-500" : "border-l-sky-400"}`}>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <div className="flex items-center gap-2">
+              <StatusBadge tone={dashboardInsight.tone === "warning" ? "amber" : dashboardInsight.tone === "success" ? "emerald" : "sky"}>
+                {dashboardInsight.title}
+              </StatusBadge>
+            </div>
+            <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600 dark:text-slate-300">{dashboardInsight.message}</p>
+          </div>
+          {dashboardInsight.actionHref && dashboardInsight.actionLabel ? (
+            <QuickActionButton href={dashboardInsight.actionHref} variant="secondary">
+              {dashboardInsight.actionLabel}
+            </QuickActionButton>
+          ) : null}
+        </div>
+      </Card>
+
       <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <p className="text-sm font-medium text-slate-500">Total Pengeluaran</p>
-          <p className="mt-3 text-3xl font-bold text-slate-950">{formatCurrency(totalExpenses)}</p>
-          <p className="mt-2 text-xs text-slate-500">
-            {selectedDateRange
+        <MetricCard
+          icon={<WalletIcon />}
+          title="Total Pengeluaran"
+          value={formatCurrency(totalExpenses)}
+          subtitle={
+            selectedDateRange
               ? `${selectedDateRange.start.toLocaleDateString("id-ID")} - ${new Date(selectedDateRange.end.getTime() - 1).toLocaleDateString("id-ID")}`
-              : periodLabel}
-          </p>
-        </Card>
-        <Card>
-          <p className="text-sm font-medium text-slate-500">Kategori Terbesar</p>
-          <p className="mt-3 text-2xl font-bold text-slate-950">{highestCategory?.name ?? "Belum ada"}</p>
-          <p className="mt-2 text-sm text-slate-500">{highestCategory ? formatCurrency(highestCategory.total) : "Belum ada transaksi"}</p>
-        </Card>
-        <Card>
-          <p className="text-sm font-medium text-slate-500">Jumlah Transaksi</p>
-          <p className="mt-3 text-3xl font-bold text-slate-950">{filteredTransactions.length}</p>
-          <p className="mt-2 text-sm text-slate-500">Transaksi pada periode ini</p>
-        </Card>
+              : periodLabel
+          }
+        />
+        <MetricCard
+          icon={<TagIcon />}
+          title="Kategori Terbesar"
+          value={highestCategory?.name ?? "Belum ada"}
+          subtitle={highestCategory ? formatCurrency(highestCategory.total) : "Belum ada transaksi"}
+          tone={highestCategory?.name === "Lainnya" ? "amber" : "brand"}
+        />
+        <MetricCard
+          icon={<ReceiptStackIcon />}
+          title="Jumlah Transaksi"
+          value={filteredTransactions.length}
+          subtitle="Transaksi pada periode ini"
+          tone="sky"
+        />
       </div>
 
       <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-        <Card>
-          <h2 className="text-base font-semibold text-slate-950">Pengeluaran per Kategori</h2>
-          <div className="mt-4">
-            <CategoryChart data={chartData} />
-          </div>
-        </Card>
-        <Card>
-          <h2 className="text-base font-semibold text-slate-950">Progres Anggaran Bulanan</h2>
-          <p className="mt-1 text-sm text-slate-500">
-            {start.toLocaleDateString("id-ID")} - {new Date(end.getTime() - 1).toLocaleDateString("id-ID")}
-          </p>
-          <div className="mt-4">
-            <BudgetProgressList items={budgetItems} />
-          </div>
-        </Card>
+        <DataCard title="Pengeluaran per Kategori" description="Lihat kategori yang paling banyak menyerap pengeluaran pada periode terpilih.">
+          <CategoryChart data={chartData} />
+        </DataCard>
+        <DataCard
+          title="Progres Anggaran Bulanan"
+          description={`${start.toLocaleDateString("id-ID")} - ${new Date(end.getTime() - 1).toLocaleDateString("id-ID")}`}
+        >
+          <BudgetProgressList items={budgetItems} />
+        </DataCard>
       </div>
 
       <UpcomingRemindersWidget notifications={reminderNotifications} reminders={upcomingReminders} />
 
       {filters.period === "year" ? (
-        <Card>
-          <h2 className="text-base font-semibold text-slate-950">Rincian Bulanan</h2>
-          <div className="mt-4">
-            <MonthlyBreakdownChart data={yearlyBreakdown} />
-          </div>
-        </Card>
+        <DataCard title="Rincian Bulanan" description="Bandingkan ritme pengeluaran sepanjang tahun terpilih.">
+          <MonthlyBreakdownChart data={yearlyBreakdown} />
+        </DataCard>
       ) : null}
 
-      <Card>
-        <div className="mb-2 flex items-center justify-between">
-          <h2 className="text-base font-semibold text-slate-950">Transaksi Terbaru</h2>
+      <DataCard
+        title="Transaksi Terbaru"
+        description="Aktivitas terakhir pada periode ini."
+        action={
           <Link className="text-sm font-semibold text-brand-700" href="/transactions">
             Lihat semua
           </Link>
-        </div>
+        }
+      >
         <RecentTransactions transactions={recentTransactions} />
-      </Card>
+      </DataCard>
     </>
+  );
+}
+
+function WalletIcon() {
+  return (
+    <svg fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
+      <path d="M19 7V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-1" />
+      <path d="M16 12h.01" />
+      <path d="M17 9h4v6h-4a3 3 0 0 1 0-6Z" />
+    </svg>
+  );
+}
+
+function TagIcon() {
+  return (
+    <svg fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
+      <path d="M20.5 13.5 13.5 20.5a2.1 2.1 0 0 1-3 0L3 13V3h10l7.5 7.5a2.1 2.1 0 0 1 0 3Z" />
+      <path d="M7.5 7.5h.01" />
+    </svg>
+  );
+}
+
+function ReceiptStackIcon() {
+  return (
+    <svg fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
+      <path d="M7 3h10l2 2v16l-3-2-2 2-2-2-2 2-2-2-3 2V5l2-2Z" />
+      <path d="M9 8h6" />
+      <path d="M9 12h6" />
+      <path d="M9 16h4" />
+    </svg>
+  );
+}
+
+function ReceiptIcon() {
+  return (
+    <svg fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
+      <path d="M7 3h10l2 2v16l-3-2-2 2-2-2-2 2-2-2-3 2V5l2-2Z" />
+      <path d="M9 10h6" />
+      <path d="M9 14h4" />
+    </svg>
+  );
+}
+
+function PlusIcon() {
+  return (
+    <svg fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24">
+      <path d="M12 5v14" />
+      <path d="M5 12h14" />
+    </svg>
   );
 }

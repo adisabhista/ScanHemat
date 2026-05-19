@@ -64,10 +64,18 @@ test("custom period shows and submits date range only", () => {
 test("normalization drops hidden URL values", () => {
   assert.deepEqual(
     normalizeTransactionFilters({ period: "all", month: 3, year: 2026, startDate: "2026-01-01", endDate: "2026-01-31", categoryId: "cat-1" }, now),
-    { period: "all", categoryId: "cat-1" }
+    { period: "all", categoryId: "cat-1", search: undefined }
   );
   assert.deepEqual(
     normalizeTransactionFilters({ period: "year", month: 3, year: 2026, startDate: "2026-01-01" }, now),
-    { period: "year", year: 2026, categoryId: undefined }
+    { period: "year", year: 2026, categoryId: undefined, search: undefined }
   );
+});
+
+test("normalizes and serializes transaction search", () => {
+  const filters = normalizeTransactionFilters({ period: "all", search: "  kopi  " }, now);
+  const params = buildTransactionFilterSearchParams(filters, now);
+
+  assert.equal(filters.search, "kopi");
+  assert.equal(params.get("search"), "kopi");
 });

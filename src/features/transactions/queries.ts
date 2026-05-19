@@ -100,6 +100,14 @@ export async function getTransactions(userId: string, filters: TransactionFilter
     where.categoryId = filters.categoryId;
   }
 
+  if (filters.search) {
+    where.OR = [
+      { merchant: { contains: filters.search, mode: "insensitive" } },
+      { notes: { contains: filters.search, mode: "insensitive" } },
+      { category: { name: { contains: filters.search, mode: "insensitive" } } }
+    ];
+  }
+
   return prisma.transaction.findMany({
     where,
     include: {

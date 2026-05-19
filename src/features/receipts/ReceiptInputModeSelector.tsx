@@ -8,34 +8,42 @@ type ReceiptInputModeSelectorProps = {
   onModeChange: (mode: ReceiptInputMode) => void;
 };
 
-const modes: Array<{ value: ReceiptInputMode; label: string }> = [
-  { value: "manual", label: "Input Manual" },
-  { value: "file", label: "Unggah File" },
-  { value: "camera", label: "Pindai Kamera" }
+const modes: Array<{ value: ReceiptInputMode; label: string; description: string; icon: string }> = [
+  { value: "manual", label: "Input Manual", description: "Untuk transaksi tanpa struk", icon: "M" },
+  { value: "file", label: "Unggah File", description: "Untuk foto atau PDF e-receipt", icon: "F" },
+  { value: "camera", label: "Pindai Kamera", description: "Untuk struk fisik langsung", icon: "K" }
 ];
 
 export function ReceiptInputModeSelector({ disabled = false, mode, onModeChange }: ReceiptInputModeSelectorProps) {
   return (
-    <div className="grid gap-2">
-      <p className="text-sm font-medium text-slate-700">Pilih cara menambahkan transaksi</p>
-      <div className="grid gap-2 sm:grid-cols-3">
+    <div className="grid gap-3">
+      <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Pilih cara menambahkan transaksi</p>
+      <div className="grid gap-3 sm:grid-cols-3">
         {modes.map((inputMode) => {
           const isSelected = inputMode.value === mode;
 
           return (
             <button
               aria-pressed={isSelected}
-              className={`min-h-10 rounded-md border px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${
+              className={`min-h-28 rounded-2xl border p-4 text-left transition focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 focus:ring-offset-white disabled:cursor-not-allowed disabled:opacity-60 dark:focus:ring-offset-slate-900 ${
                 isSelected
-                  ? "border-brand-600 bg-brand-50 text-brand-700"
-                  : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                  ? "border-brand-500 bg-brand-50 text-brand-700 shadow-sm ring-1 ring-brand-100 dark:bg-brand-500/15 dark:text-brand-100 dark:ring-brand-500/20"
+                  : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
               }`}
               disabled={disabled}
               key={inputMode.value}
               onClick={() => onModeChange(inputMode.value)}
               type="button"
             >
-              {inputMode.label}
+              <span className="flex items-start gap-3">
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-sm font-bold text-slate-700 dark:bg-slate-800 dark:text-slate-100">
+                  {inputMode.icon}
+                </span>
+                <span>
+                  <span className="block font-semibold">{inputMode.label}</span>
+                  <span className="mt-1 block text-sm font-normal leading-5 text-slate-500 dark:text-slate-400">{inputMode.description}</span>
+                </span>
+              </span>
             </button>
           );
         })}

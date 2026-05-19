@@ -3,6 +3,8 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import { getSidebarActiveMarkerClassName, getSidebarTooltipLabel } from "./sidebar-nav";
+
 type SidebarNavItemProps = {
   active: boolean;
   href: string;
@@ -15,8 +17,8 @@ export function SidebarNavItem({ active, href, icon, isCollapsed, label }: Sideb
   return (
     <Link
       aria-current={active ? "page" : undefined}
-      aria-label={isCollapsed ? label : undefined}
-      className={`group relative flex min-h-11 items-center gap-3 rounded-lg text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-slate-950 ${
+      aria-label={getSidebarTooltipLabel(label, isCollapsed)}
+      className={`group relative flex min-h-11 items-center gap-3 rounded-xl text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-slate-950 ${
         isCollapsed ? "justify-center px-2" : "px-3"
       } ${
         active
@@ -25,6 +27,7 @@ export function SidebarNavItem({ active, href, icon, isCollapsed, label }: Sideb
       }`}
       href={href}
     >
+      {active && isCollapsed ? <span className={getSidebarActiveMarkerClassName(active, isCollapsed)} aria-hidden="true" /> : null}
       <span className="flex size-5 shrink-0 items-center justify-center" aria-hidden="true">
         {icon}
       </span>

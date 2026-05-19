@@ -16,7 +16,8 @@ export async function GET(request: Request) {
     year: requestedPeriod === "month" || requestedPeriod === "year" ? url.searchParams.get("year") || undefined : undefined,
     startDate: requestedPeriod === "custom" ? url.searchParams.get("startDate") || undefined : undefined,
     endDate: requestedPeriod === "custom" ? url.searchParams.get("endDate") || undefined : undefined,
-    categoryId: url.searchParams.get("categoryId") || undefined
+    categoryId: url.searchParams.get("categoryId") || undefined,
+    search: url.searchParams.get("search") || undefined
   });
 
   if (!parsed.success) {

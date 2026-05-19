@@ -40,7 +40,7 @@ export function DashboardShell({
       <AppSidebar isCollapsed={isCollapsed} onToggleCollapsed={toggleSidebar} userName={userName} />
       <MobileNav />
       <main
-        className={`px-4 py-6 transition-[margin] duration-200 ease-in-out lg:px-8 ${
+        className={`px-4 pb-28 pt-6 transition-[margin] duration-200 ease-in-out lg:px-8 ${
           isCollapsed ? "lg:ml-[72px]" : "lg:ml-64"
         }`}
       >

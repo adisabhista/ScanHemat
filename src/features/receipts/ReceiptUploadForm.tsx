@@ -5,11 +5,13 @@ import Image from "next/image";
 import { useEffect, useRef, useState } from "react";
 
 import { Card } from "@/components/ui/Card";
+import { SectionHeader } from "@/components/ui/SectionHeader";
 import { ManualTransactionForm } from "@/features/transactions/ManualTransactionForm";
 import type { ParsedReceipt } from "@/lib/parser/receipt-parser";
 import { CameraReceiptScanner } from "./CameraReceiptScanner";
 import { FileReceiptUploader } from "./FileReceiptUploader";
 import { ReceiptInputModeSelector, type ReceiptInputMode } from "./ReceiptInputModeSelector";
+import { shouldShowScannerDebug } from "./scanner-debug";
 
 type CategoryOption = {
   id: string;
@@ -40,7 +42,6 @@ const genericOcrMessage = "Gagal membaca struk dengan Google OCR.";
 const missingFileMessage = "Pilih file struk terlebih dahulu.";
 const unsupportedFileMessage = "Format file tidak didukung. Gunakan JPG, PNG, WEBP, atau PDF.";
 const allowedReceiptMimeTypes = ["image/jpeg", "image/png", "image/webp", "application/pdf"];
-const isDevelopment = process.env.NODE_ENV === "development";
 
 const TransactionReviewForm = dynamic(
   () => import("@/features/receipts/TransactionReviewForm").then((module) => module.TransactionReviewForm),
@@ -52,21 +53,21 @@ const TransactionReviewForm = dynamic(
 
 const stageLabels: Record<OcrStage, string> = {
   idle: "",
-  uploading: "Mengunggah struk...",
-  ocr: "Membaca struk dengan Google OCR...",
-  processing: "Memproses hasil...",
-  completed: "Selesai membaca struk",
+  uploading: "Membaca struk...",
+  ocr: "Menganalisis total dan item...",
+  processing: "Menyiapkan hasil review...",
+  completed: "",
   failed: ""
 };
 
 function logOcr(message: string, details?: unknown) {
-  if (isDevelopment) {
+  if (shouldShowScannerDebug()) {
     console.debug(`[OCR] ${message}`, details ?? "");
   }
 }
 
 function logOcrError(message: string, details?: unknown) {
-  if (isDevelopment) {
+  if (shouldShowScannerDebug()) {
     console.error(`[OCR] ${message}`, details ?? "");
   }
 }
@@ -187,7 +188,7 @@ export function ReceiptUploadForm({ categories }: { categories: CategoryOption[]
       const payload = (await response.json()) as UploadResult | UploadErrorResult;
 
       if (!response.ok) {
-        if (isDevelopment && "debug" in payload && payload.debug) {
+        if (shouldShowScannerDebug() && "debug" in payload && payload.debug) {
           console.error("[OCR] Backend debug", payload.debug);
         }
 
@@ -266,22 +267,28 @@ export function ReceiptUploadForm({ categories }: { categories: CategoryOption[]
   const progressLabel = stageLabels[stage];
   const canRetry = stage === "failed" && Boolean(selectedFile);
   const debugProcessingState = progressLabel || (isProcessing ? "Memproses file..." : "Menunggu file");
+  const showScannerDebug = shouldShowScannerDebug();
 
   return (
     <div className="grid gap-6">
       <Card>
-        <div className="grid gap-4">
-          {isDevelopment ? (
-            <div className="grid gap-1 rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
-              <p className="font-semibold text-slate-950">Halaman scanner aktif</p>
-              <p>Mode: {mode}</p>
-              <p>File: {selectedFile?.name ?? "Belum ada file"}</p>
-              <p>Jenis file: {selectedFile?.type ?? "-"}</p>
-              <p>Ukuran file: {selectedFile ? getFileSizeLabel(selectedFile.size) : "-"}</p>
-              <p>Aksi terakhir: {lastAction}</p>
-              <p>Status proses: {debugProcessingState}</p>
-            </div>
+        <div className="grid gap-5">
+          <ReceiptStepper stage={stage} hasResult={Boolean(result)} mode={mode} />
+          {showScannerDebug ? (
+            <details className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
+              <summary className="cursor-pointer font-semibold text-slate-950 dark:text-slate-100">Debug</summary>
+              <div className="mt-3 grid gap-1">
+                <p className="font-semibold text-slate-950 dark:text-slate-100">Halaman scanner aktif</p>
+                <p>Mode: {mode}</p>
+                <p>File: {selectedFile?.name ?? "Belum ada file"}</p>
+                <p>Jenis file: {selectedFile?.type ?? "-"}</p>
+                <p>Ukuran file: {selectedFile ? getFileSizeLabel(selectedFile.size) : "-"}</p>
+                <p>Aksi terakhir: {lastAction}</p>
+                <p>Status proses: {debugProcessingState}</p>
+              </div>
+            </details>
           ) : null}
+          <SectionHeader title="Sumber Transaksi" description="Pilih cara yang paling cepat untuk mencatat pengeluaran Anda." />
           <ReceiptInputModeSelector disabled={isProcessing} mode={mode} onModeChange={handleModeChange} />
         </div>
       </Card>
@@ -311,7 +318,7 @@ export function ReceiptUploadForm({ categories }: { categories: CategoryOption[]
             <Card>
               <div className="grid gap-3">
                 {progressLabel ? (
-                  <div className="rounded-md border border-brand-100 bg-brand-50 p-3">
+                  <div className="rounded-xl border border-brand-100 bg-brand-50 p-4 dark:border-brand-500/30 dark:bg-brand-500/15">
                     <div className="flex items-center justify-between gap-3 text-sm font-medium text-brand-700">
                       <span>{progressLabel}</span>
                       <span>{progress}%</span>
@@ -321,7 +328,7 @@ export function ReceiptUploadForm({ categories }: { categories: CategoryOption[]
                     </div>
                   </div>
                 ) : null}
-                {error ? <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
+                {error ? <p className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p> : null}
               </div>
             </Card>
           ) : null}
@@ -331,17 +338,19 @@ export function ReceiptUploadForm({ categories }: { categories: CategoryOption[]
       {result ? (
         <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
           <Card>
-            <h2 className="text-base font-semibold text-slate-950">Hasil OCR</h2>
+            <SectionHeader title="Pratinjau Struk" description="Gunakan pratinjau ini untuk mencocokkan data sebelum menyimpan." />
             {result.mimeType === "application/pdf" ? (
-              <div className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">PDF struk sudah diproses di server.</div>
+              <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">PDF struk sudah diproses di server.</div>
             ) : (
-              <div className="mt-4 overflow-hidden rounded-md border border-slate-200 bg-slate-100">
+              <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-800">
                 <Image alt="Pratinjau struk" className="h-auto w-full object-contain" height={900} src={result.filePath} width={700} />
               </div>
             )}
-            <pre className="mt-4 max-h-80 overflow-auto whitespace-pre-wrap rounded-md bg-slate-950 p-4 text-xs text-slate-100">
-              {result.rawText || "Tidak ada teks terbaca."}
-            </pre>
+            {showScannerDebug ? (
+              <pre className="mt-4 max-h-80 overflow-auto whitespace-pre-wrap rounded-xl bg-slate-950 p-4 text-xs text-slate-100">
+                {result.rawText || "Tidak ada teks terbaca."}
+              </pre>
+            ) : null}
           </Card>
           <TransactionReviewForm
             categories={categories}
@@ -352,5 +361,45 @@ export function ReceiptUploadForm({ categories }: { categories: CategoryOption[]
         </div>
       ) : null}
     </div>
+  );
+}
+
+function ReceiptStepper({
+  stage,
+  hasResult,
+  mode
+}: {
+  stage: OcrStage;
+  hasResult: boolean;
+  mode: ReceiptInputMode;
+}) {
+  const steps = ["Pilih sumber", "Baca struk", "Periksa hasil", "Simpan"];
+  const activeIndex = hasResult ? 2 : stage === "uploading" || stage === "ocr" || stage === "processing" ? 1 : mode === "manual" ? 2 : 0;
+
+  return (
+    <ol className="grid gap-2 sm:grid-cols-4" aria-label="Langkah pindai struk">
+      {steps.map((step, index) => {
+        const isActive = index === activeIndex;
+        const isComplete = index < activeIndex;
+
+        return (
+          <li
+            className={`flex items-center gap-3 rounded-xl border px-3 py-2 text-sm ${
+              isActive
+                ? "border-brand-200 bg-brand-50 text-brand-700 dark:border-brand-500/30 dark:bg-brand-500/15 dark:text-brand-100"
+                : isComplete
+                  ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/15 dark:text-emerald-100"
+                  : "border-slate-200 bg-slate-50 text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400"
+            }`}
+            key={step}
+          >
+            <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-white text-xs font-bold shadow-sm dark:bg-slate-900">
+              {index + 1}
+            </span>
+            <span className="font-semibold">{step}</span>
+          </li>
+        );
+      })}
+    </ol>
   );
 }

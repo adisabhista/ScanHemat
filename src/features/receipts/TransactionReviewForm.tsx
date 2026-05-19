@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
+import { SectionHeader } from "@/components/ui/SectionHeader";
 import { Select } from "@/components/ui/Select";
 import { createTransactionAction } from "@/features/transactions/actions";
 import { shouldSuggestVisionVerification } from "@/lib/ai/vision-verification";
@@ -101,11 +102,10 @@ export function TransactionReviewForm({
 
   return (
     <Card>
-      <h2 className="text-base font-semibold text-slate-950">Periksa Data Transaksi</h2>
-      <p className="mt-1 text-sm text-slate-500">Ubah hasil pindai sebelum menyimpan transaksi.</p>
+      <SectionHeader title="Periksa Data Transaksi" description="Ubah hasil pindai sebelum menyimpan transaksi." />
 
       {currentReceipt.warnings && currentReceipt.warnings.length > 0 && (
-        <div className="mt-4 rounded-md border border-amber-200 bg-amber-50 p-4">
+        <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4">
           <h3 className="text-sm font-medium text-amber-800">Perhatian</h3>
           <div className="mt-2 text-sm text-amber-700">
             <ul className="list-disc space-y-1 pl-5">
@@ -118,10 +118,10 @@ export function TransactionReviewForm({
       )}
 
       {shouldShowVisionAction ? (
-        <div className="mt-4 grid gap-3 rounded-md border border-brand-100 bg-brand-50 p-4 text-sm text-brand-800">
-          <p>Hasil kurang yakin. Anda dapat menganalisis ulang dengan AI Visual.</p>
+        <div className="mt-4 grid gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100">
+          <p className="font-medium">Hasil kurang yakin. Mohon periksa kembali sebelum menyimpan.</p>
           {mimeType === "application/pdf" ? (
-            <p className="text-brand-700">Untuk PDF, AI Visual akan dicoba jika model mendukung analisis PDF.</p>
+            <p>Untuk PDF, AI Visual akan dicoba jika model mendukung analisis PDF.</p>
           ) : null}
           <Button disabled={visionStatus === "loading"} onClick={verifyWithVision} type="button" variant="secondary">
             Analisis Ulang dengan AI Visual
@@ -140,7 +140,7 @@ export function TransactionReviewForm({
       ) : null}
 
       {corrections.length > 0 ? (
-        <div className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
+        <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
           <h3 className="font-semibold text-slate-950">Saran AI Visual</h3>
           <ul className="mt-2 list-disc space-y-1 pl-5">
             {corrections.map((correction, index) => (
@@ -151,13 +151,13 @@ export function TransactionReviewForm({
       ) : null}
 
       {audit ? (
-        <details className="mt-4 rounded-md border border-slate-200 bg-white p-4 text-sm text-slate-700">
+        <details className="mt-4 rounded-xl border border-slate-200 bg-white p-4 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
           <summary className="cursor-pointer list-none">
             <span className="block font-semibold text-slate-950">Audit Struk</span>
             <span className="mt-1 block text-slate-500">Lihat alasan AI memilih data ini.</span>
           </summary>
           <div className="mt-4 grid gap-4">
-            <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
+            <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-800">
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <h3 className="font-semibold text-slate-950">Ringkasan audit</h3>
                 <span className={`w-fit rounded-full px-2.5 py-1 text-xs font-semibold ${getAuditConfidenceClass(audit.confidence)}`}>
@@ -197,7 +197,7 @@ export function TransactionReviewForm({
         <input name="receiptId" type="hidden" value={receiptId} />
         <input name="items" type="hidden" value={serializedItems} />
         <Input
-          label="Merchant / Toko"
+          label="Toko"
           name="merchant"
           onChange={(event) => setMerchant(event.target.value)}
           placeholder="Nama toko"
@@ -234,7 +234,7 @@ export function TransactionReviewForm({
         <label className="grid gap-1.5 text-sm font-medium text-slate-700">
           <span>Catatan</span>
           <textarea
-            className="min-h-24 rounded-md border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100"
+            className="min-h-24 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none transition focus:border-brand-500 focus:ring-2 focus:ring-brand-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
             name="notes"
             placeholder="Catatan tambahan"
           />
@@ -252,7 +252,7 @@ export function TransactionReviewForm({
           </div>
           {items.length === 0 ? <p className="text-sm text-slate-500">Belum ada item terbaca.</p> : null}
           {items.map((item, index) => (
-            <div className="grid gap-2 rounded-md border border-slate-200 p-3 sm:grid-cols-[1fr_160px_auto]" key={`${item.name}-${index}`}>
+            <div className="grid gap-2 rounded-xl border border-slate-200 p-3 sm:grid-cols-[1fr_160px_auto] dark:border-slate-700" key={`${item.name}-${index}`}>
               <Input
                 aria-label="Nama item"
                 value={item.name}
@@ -269,7 +269,7 @@ export function TransactionReviewForm({
                 placeholder="Harga"
               />
               <button
-                className="rounded-md px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50"
+                className="rounded-xl px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-500"
                 onClick={() => setItems((current) => current.filter((_, itemIndex) => itemIndex !== index))}
                 type="button"
               >
@@ -338,7 +338,7 @@ function AuditCandidateList({
 
 function getAuditFieldLabel(field: string) {
   const labels: Record<string, string> = {
-    merchant: "Merchant",
+    merchant: "Toko",
     transactionDate: "Tanggal",
     totalAmount: "Total",
     category: "Kategori",

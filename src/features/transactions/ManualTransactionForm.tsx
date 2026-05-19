@@ -54,7 +54,7 @@ export function ManualTransactionForm({ categories }: { categories: CategoryOpti
     <Card>
       <form action={createTransactionAction} className="grid gap-4">
         <input name="items" type="hidden" value={serializedItems} />
-        <Input label="Merchant / Toko" name="merchant" placeholder="Nama toko" />
+        <Input label="Toko" name="merchant" placeholder="Nama toko" />
         <div>
           <Input
             value={transactionDate}

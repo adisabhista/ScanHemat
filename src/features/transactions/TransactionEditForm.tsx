@@ -74,7 +74,7 @@ export function TransactionEditForm({
       </div>
       <form action={updateAction} className="grid gap-4">
         <input name="items" type="hidden" value={serializedItems} />
-        <Input defaultValue={transaction.merchant ?? ""} label="Merchant / Toko" name="merchant" />
+        <Input defaultValue={transaction.merchant ?? ""} label="Toko" name="merchant" />
         <div>
           <Input
             value={transactionDate}

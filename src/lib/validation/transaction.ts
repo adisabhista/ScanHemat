@@ -50,5 +50,6 @@ export const transactionFilterSchema = z.object({
   year: z.coerce.number().int().min(2000).max(2100).optional(),
   startDate: z.string().optional(),
   endDate: z.string().optional(),
-  categoryId: z.string().optional()
+  categoryId: z.string().optional(),
+  search: z.string().trim().max(100).optional()
 });

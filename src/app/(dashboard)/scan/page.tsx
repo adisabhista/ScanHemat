@@ -17,10 +17,10 @@ export default async function ScanPage({
   const categories = await getAvailableCategories(userId);
 
   return (
-    <>
+    <div className="mx-auto max-w-5xl space-y-6">
       <PageHeader title="Pindai Struk" description="Input manual, unggah file, atau pindai struk dengan kamera lalu periksa sebelum menyimpan." />
-      {params.error ? <p className="rounded-md bg-red-50 p-3 text-sm text-red-700">{params.error}</p> : null}
+      {params.error ? <p className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{params.error}</p> : null}
       <ReceiptUploadForm categories={categories.map((category) => ({ id: category.id, name: category.name }))} />
-    </>
+    </div>
   );
 }

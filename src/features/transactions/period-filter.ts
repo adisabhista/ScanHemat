@@ -9,6 +9,7 @@ export type TransactionFilters = {
   startDate?: string;
   endDate?: string;
   categoryId?: string;
+  search?: string;
 };
 
 export type VisiblePeriodControls = {
@@ -34,11 +35,13 @@ export function normalizeTransactionFilters(filters: TransactionFilters = {}, no
   const currentMonth = now.getUTCMonth() + 1;
   const currentYear = now.getUTCFullYear();
   const categoryId = filters.categoryId || undefined;
+  const search = filters.search?.trim() || undefined;
 
   if (period === "all") {
     return {
       period,
-      categoryId
+      categoryId,
+      search
     };
   }
 
@@ -46,7 +49,8 @@ export function normalizeTransactionFilters(filters: TransactionFilters = {}, no
     return {
       period,
       year: filters.year ?? currentYear,
-      categoryId
+      categoryId,
+      search
     };
   }
 
@@ -55,7 +59,8 @@ export function normalizeTransactionFilters(filters: TransactionFilters = {}, no
       period,
       startDate: filters.startDate || undefined,
       endDate: filters.endDate || undefined,
-      categoryId
+      categoryId,
+      search
     };
   }
 
@@ -63,7 +68,8 @@ export function normalizeTransactionFilters(filters: TransactionFilters = {}, no
     period,
     month: filters.month ?? currentMonth,
     year: filters.year ?? currentYear,
-    categoryId
+    categoryId,
+    search
   };
 }
 
@@ -94,6 +100,10 @@ export function buildTransactionFilterSearchParams(filters: TransactionFilters =
 
   if (normalized.categoryId) {
     params.set("categoryId", normalized.categoryId);
+  }
+
+  if (normalized.search) {
+    params.set("search", normalized.search);
   }
 
   return params;

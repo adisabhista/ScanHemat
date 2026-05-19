@@ -87,12 +87,14 @@ export function FloatingAssistantWidget() {
         />
       ) : (
         <button
-          className="fixed bottom-4 right-4 z-50 inline-flex min-h-12 items-center gap-2 rounded-full bg-brand-600 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-brand-900/20 transition hover:bg-brand-700 sm:bottom-6 sm:right-6"
+          aria-label="Buka Asisten Hemat"
+          className="fixed bottom-4 right-4 z-40 inline-flex min-h-12 items-center gap-2 rounded-full bg-brand-600 px-4 py-3 text-sm font-semibold text-white shadow-xl shadow-brand-900/25 transition hover:bg-brand-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 focus:ring-offset-slate-50 dark:focus:ring-offset-slate-950 sm:bottom-6 sm:right-6"
           onClick={() => dispatch({ type: "open" })}
           type="button"
         >
           <span className="flex size-6 items-center justify-center rounded-full bg-white/15 text-xs font-bold">AI</span>
           Asisten Hemat
+          <span className="absolute -right-0.5 -top-0.5 size-3 rounded-full border-2 border-white bg-amber-400 dark:border-slate-950" aria-hidden="true" />
         </button>
       )}
     </>
