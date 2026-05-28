@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { validateAndMergeAiResult } from "./index";
+import { GeminiReceiptExtractor } from "./providers/gemini-receipt-extractor";
 import type { AiReceiptExtraction } from "./types";
 import type { ParsedReceipt } from "@/lib/parser/receipt-parser";
+import type { AiGenerationProvider } from "./providers/generation-provider";
 
 function buildAiResult(overrides: Partial<AiReceiptExtraction> = {}): AiReceiptExtraction {
   return {
@@ -38,6 +40,36 @@ test("uses valid Gemini category as the selected category", () => {
   assert.equal(result.category, "Makanan");
   assert.equal(result.categorySource, "gemini");
   assert.equal(result.categoryConfidence, 0.92);
+});
+
+test("receipt extractor uses the selected generation provider interface", async () => {
+  const expected = buildAiResult();
+  const provider: AiGenerationProvider = {
+    name: "gemini-api",
+    getModel() {
+      return "gemini-3.5-flash";
+    },
+    async generateContent() {
+      throw new Error("generateContent should not be called directly");
+    },
+    async generateText() {
+      throw new Error("generateText should not be called directly");
+    },
+    async generateJson(input) {
+      assert.equal(input.role, "receipt");
+      assert.equal(input.modelEnvKey, "GEMINI_RECEIPT_MODEL");
+      assert.match(String(input.prompt), /parser struk belanja Indonesia/);
+      return expected as never;
+    },
+    async generateMultimodalJson() {
+      throw new Error("generateMultimodalJson should not be called for text extraction");
+    }
+  };
+
+  const extractor = new GeminiReceiptExtractor(provider);
+  const result = await extractor.extract("TOTAL 50.000");
+
+  assert.equal(result, expected);
 });
 
 test("shows warning when Gemini category confidence is low", () => {

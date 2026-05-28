@@ -56,8 +56,8 @@ export function formatReminderDate(value: Date | string) {
   }).format(new Date(value));
 }
 
-export function formatReminderAmount(value: number | null | undefined) {
-  return value == null ? null : formatCurrency(value);
+export function formatReminderAmount(value: number | string | { toString(): string } | null | undefined) {
+  return value == null ? null : formatCurrency(value.toString());
 }
 
 function getDefaultReminderOffsets(type?: ReminderType | null) {
@@ -216,7 +216,7 @@ export function toReminderPublicItem(reminder: Pick<Reminder, "title" | "type" |
     title: reminder.title,
     type: reminderTypeLabels[reminder.type],
     dueDate: reminder.dueDate.toISOString().slice(0, 10),
-    amount: reminder.amount,
+    amount: reminder.amount == null ? null : Number(reminder.amount),
     countdownLabel: getCountdownLabel(reminder.dueDate, now),
     notes: reminder.notes
   };

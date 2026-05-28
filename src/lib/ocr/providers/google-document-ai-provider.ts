@@ -21,6 +21,7 @@ import {
 } from "@/lib/ocr/types";
 
 const supportedGoogleMimeTypes = new Set(["application/pdf", "image/jpeg", "image/png", "image/webp"]);
+export const googleDocumentAiLowConfidenceThreshold = 0.5;
 const requiredGoogleEnvKeys = [
   "GOOGLE_CLOUD_PROJECT_ID",
   "GOOGLE_CLOUD_LOCATION",

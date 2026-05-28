@@ -94,6 +94,7 @@ export function AppSidebar({
             isCollapsed ? "justify-center px-2" : "px-3"
           }`}
           onClick={() => signOut({ callbackUrl: "/login" })}
+          title={isCollapsed ? "Keluar" : undefined}
           type="button"
         >
           <LogOutIcon className={iconClassName} aria-hidden="true" />

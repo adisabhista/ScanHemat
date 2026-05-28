@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { getAvailableCategories } from "@/features/categories/queries";
 import { requireUserId } from "@/lib/auth";
 import { extractReceiptWithAi, validateAndMergeAiResult } from "@/lib/ai/index";
+import { getAiGenerationUserMessage } from "@/lib/ai/providers/generation-provider";
 import { generateReceiptAudit } from "@/lib/audit/receipt-audit";
 import {
   findCategoryOptionByName,
@@ -10,9 +11,11 @@ import {
   normalizeTransactionCategoryName
 } from "@/lib/categories/category-classifier";
 import { extractReceiptText, OcrProcessingError } from "@/lib/ocr";
+import { googleDocumentAiLowConfidenceThreshold } from "@/lib/ocr/providers/google-document-ai-provider";
 import { serializeError } from "@/lib/ocr/serialize-error";
 import { parseReceiptText } from "@/lib/parser/receipt-parser";
 import { prisma } from "@/lib/prisma";
+import { getReceiptReviewState } from "@/lib/review/review-state";
 import { receiptStorage } from "@/lib/storage/local-storage-service";
 import { getMaxReceiptUploadBytes, receiptUploadSchema } from "@/lib/validation/receipt";
 
@@ -106,16 +109,15 @@ export async function POST(request: Request) {
         }
       } catch (err) {
         console.warn("[AI] Extractor failed, falling back to standard parser:", err);
-        const warnMsg = err instanceof Error && err.message.includes("Model Gemini tidak tersedia")
-          ? err.message
-          : "Ekstraksi AI gagal. Hasil diambil dari OCR biasa dan perlu diperiksa.";
+        const warnMsg = getAiGenerationUserMessage(err, "Ekstraksi AI gagal. Hasil diambil dari OCR biasa dan perlu diperiksa.");
         finalReceipt.warnings = [...(finalReceipt.warnings ?? []), warnMsg];
         finalReceipt.confidence = "low";
       }
 
       if (process.env.NODE_ENV === "development" && aiResultDebug) {
         console.debug("[AI] Gemini extraction completed. Final Source Map:", {
-          model: process.env.GEMINI_RECEIPT_MODEL,
+          provider: process.env.AI_GENERATION_PROVIDER?.trim() || "gemini-api",
+          model: process.env.GEMINI_RECEIPT_MODEL?.trim() || "gemini-3.5-flash",
           merchantSource: finalReceipt.merchant === aiResultDebug.merchant.value ? "gemini" : "parser",
           dateSource: finalReceipt.transactionDate === aiResultDebug.transactionDate.value ? "gemini" : (finalReceipt.transactionDate ? "parser" : "fallback"),
           rawDateText: aiResultDebug.transactionDate.sourceText,
@@ -152,6 +154,18 @@ export async function POST(request: Request) {
         finalReceipt.categoryReason = `Kategori "${requestedCategory ?? "-"}" tidak tersedia, memakai Lainnya.`;
       }
 
+      const hasLowOcrConfidence =
+        ocrResult.provider === "google-document-ai" &&
+        typeof ocrResult.confidence === "number" &&
+        ocrResult.confidence < googleDocumentAiLowConfidenceThreshold;
+
+      if (hasLowOcrConfidence) {
+        finalReceipt.warnings = Array.from(
+          new Set([...(finalReceipt.warnings ?? []), "Kualitas OCR rendah. Silakan coba foto ulang atau input manual."])
+        );
+        finalReceipt.confidence = "low";
+      }
+
       if (process.env.NODE_ENV === "development") {
         console.debug("[AI] Date parsing", {
           selectedDate: finalReceipt.transactionDate,
@@ -168,6 +182,7 @@ export async function POST(request: Request) {
       }
 
       finalReceipt.audit = generateReceiptAudit({ rawText, parsedReceipt: finalReceipt });
+      const reviewState = getReceiptReviewState(finalReceipt, { lowOcrConfidence: hasLowOcrConfidence });
 
       const updatedReceipt = await prisma.receipt.update({
         where: { id: receipt.id },
@@ -175,7 +190,10 @@ export async function POST(request: Request) {
           rawText,
           parsedData: finalReceipt,
           status: "OCR_COMPLETED",
-          errorMessage: null
+          errorMessage: null,
+          needsReview: reviewState.needsReview,
+          reviewReasons: reviewState.reasons,
+          reviewedAt: null
         }
       });
 
@@ -183,7 +201,6 @@ export async function POST(request: Request) {
         receiptId: updatedReceipt.id,
         filePath: updatedReceipt.filePath,
         mimeType: updatedReceipt.mimeType,
-        rawText: updatedReceipt.rawText ?? "",
         parsed: finalReceipt,
         ocr: {
           provider: ocrResult.provider,

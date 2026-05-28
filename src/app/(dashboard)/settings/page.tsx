@@ -10,12 +10,15 @@ export default async function SettingsPage() {
   const session = await getCurrentSession();
   const accountInitial = (session?.user?.name || session?.user?.email || "P").slice(0, 1).toUpperCase();
   const ocrProvider = process.env.OCR_PROVIDER?.trim() || "google-document-ai";
+  const aiGenerationProvider = process.env.AI_GENERATION_PROVIDER?.trim() || "gemini-api";
   const geminiModel =
     process.env.GEMINI_VISION_MODEL?.trim() ||
-    process.env.GEMINI_ASSISTANT_MODEL?.trim() ||
     process.env.GEMINI_RECEIPT_MODEL?.trim() ||
-    "Default sistem";
-  const isGeminiConfigured = Boolean(process.env.GOOGLE_VERTEX_AI_PROJECT_ID?.trim() && process.env.GOOGLE_VERTEX_AI_LOCATION?.trim());
+    "gemini-3.5-flash";
+  const isGeminiConfigured =
+    aiGenerationProvider === "vertex-ai"
+      ? Boolean(process.env.GOOGLE_VERTEX_AI_PROJECT_ID?.trim() && process.env.GOOGLE_VERTEX_AI_LOCATION?.trim())
+      : Boolean(process.env.GEMINI_API_KEY?.trim());
 
   return (
     <div className="mx-auto max-w-4xl space-y-6">
@@ -50,7 +53,7 @@ export default async function SettingsPage() {
       <DataCard title={settingsSections[2]} description="Status fitur pembacaan struk dan bantuan AI tanpa menampilkan kredensial atau nilai privat.">
         <div className="grid gap-3">
           <SettingRow title="OCR aktif" description={`Provider pembacaan struk: ${ocrProvider}.`} status="Aktif" tone="emerald" />
-          <SettingRow title="Gemini aktif" description="Digunakan untuk ekstraksi pintar, audit struk, dan bantuan asisten jika konfigurasi tersedia." status={isGeminiConfigured ? "Aktif" : "Belum aktif"} tone={isGeminiConfigured ? "emerald" : "amber"} />
+          <SettingRow title="Gemini aktif" description={`Provider generasi AI: ${aiGenerationProvider}. Digunakan untuk ekstraksi pintar, verifikasi visual, pengingat, dan bantuan asisten jika konfigurasi tersedia.`} status={isGeminiConfigured ? "Aktif" : "Belum aktif"} tone={isGeminiConfigured ? "emerald" : "amber"} />
           <SettingRow title="Model" description="Nama model aman untuk ditampilkan dan tidak berisi kredensial." status={geminiModel} tone="slate" />
         </div>
       </DataCard>

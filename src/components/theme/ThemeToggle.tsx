@@ -99,6 +99,7 @@ export function ThemeToggle({ collapsed = false, compact = false }: ThemeToggleP
           className="group relative flex min-h-11 w-full items-center justify-center rounded-lg text-slate-600 transition hover:bg-slate-50 hover:text-slate-950 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:ring-offset-2 focus:ring-offset-white disabled:cursor-not-allowed disabled:opacity-70 dark:text-slate-300 dark:hover:bg-slate-900 dark:hover:text-slate-50 dark:focus:ring-offset-slate-950"
           disabled={!mounted}
           onClick={() => setIsOpen((currentValue) => !currentValue)}
+          title="Tampilan"
           type="button"
         >
           {themeIcons[currentTheme]({})}

@@ -10,6 +10,7 @@ export type TransactionFilters = {
   endDate?: string;
   categoryId?: string;
   search?: string;
+  needsReview?: boolean;
 };
 
 export type VisiblePeriodControls = {
@@ -36,12 +37,14 @@ export function normalizeTransactionFilters(filters: TransactionFilters = {}, no
   const currentYear = now.getUTCFullYear();
   const categoryId = filters.categoryId || undefined;
   const search = filters.search?.trim() || undefined;
+  const needsReview = filters.needsReview || undefined;
 
   if (period === "all") {
     return {
       period,
       categoryId,
-      search
+      search,
+      ...(needsReview ? { needsReview } : {})
     };
   }
 
@@ -50,7 +53,8 @@ export function normalizeTransactionFilters(filters: TransactionFilters = {}, no
       period,
       year: filters.year ?? currentYear,
       categoryId,
-      search
+      search,
+      ...(needsReview ? { needsReview } : {})
     };
   }
 
@@ -60,7 +64,8 @@ export function normalizeTransactionFilters(filters: TransactionFilters = {}, no
       startDate: filters.startDate || undefined,
       endDate: filters.endDate || undefined,
       categoryId,
-      search
+      search,
+      ...(needsReview ? { needsReview } : {})
     };
   }
 
@@ -69,7 +74,8 @@ export function normalizeTransactionFilters(filters: TransactionFilters = {}, no
     month: filters.month ?? currentMonth,
     year: filters.year ?? currentYear,
     categoryId,
-    search
+    search,
+    ...(needsReview ? { needsReview } : {})
   };
 }
 
@@ -104,6 +110,10 @@ export function buildTransactionFilterSearchParams(filters: TransactionFilters =
 
   if (normalized.search) {
     params.set("search", normalized.search);
+  }
+
+  if (normalized.needsReview) {
+    params.set("needsReview", "1");
   }
 
   return params;

@@ -22,7 +22,6 @@ type UploadResult = {
   receiptId: string;
   filePath: string;
   mimeType: string;
-  rawText: string;
   parsed: ParsedReceipt;
   ocr?: {
     provider: string;
@@ -346,11 +345,6 @@ export function ReceiptUploadForm({ categories }: { categories: CategoryOption[]
                 <Image alt="Pratinjau struk" className="h-auto w-full object-contain" height={900} src={result.filePath} width={700} />
               </div>
             )}
-            {showScannerDebug ? (
-              <pre className="mt-4 max-h-80 overflow-auto whitespace-pre-wrap rounded-xl bg-slate-950 p-4 text-xs text-slate-100">
-                {result.rawText || "Tidak ada teks terbaca."}
-              </pre>
-            ) : null}
           </Card>
           <TransactionReviewForm
             categories={categories}

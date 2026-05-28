@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import test from "node:test";
 
 import { formatAssistantCurrency, formatAssistantDate } from "./format";
@@ -154,7 +156,7 @@ test("returns no transactions answer for empty valid query result", () => {
     hasEnoughData: false
   };
 
-  assert.equal(buildDeterministicAssistantAnswer(context), "Saya tidak menemukan transaksi pada periode tersebut.");
+  assert.equal(buildDeterministicAssistantAnswer(context), "Saya tidak menemukan data pada periode tersebut.");
 });
 
 test("builds authenticated user-scoped transaction where clause", () => {
@@ -253,6 +255,14 @@ test("uses deterministic fallback when Gemini config is unavailable", async () =
   assert.equal(response.answer, "Maksud Anda ingin melihat bulan sebelumnya, semua bulan, atau bulan tertentu?");
 });
 
+test("assistant agent uses AI generation provider selector", () => {
+  const source = readFileSync(join(process.cwd(), "src", "lib", "assistant", "gemini-agent.ts"), "utf-8");
+
+  assert.ok(source.includes("createAiGenerationProvider"));
+  assert.ok(!source.includes("GOOGLE_VERTEX_AI_PROJECT_ID"));
+  assert.ok(!source.includes("vertexai: true"));
+});
+
 test("executes mocked Gemini function calls and returns final answer", async () => {
   const functionCall = {
     id: "call-1",
@@ -261,7 +271,7 @@ test("executes mocked Gemini function calls and returns final answer", async () 
   };
   const calls: unknown[] = [];
   const geminiConfig = {
-    model: "gemini-2.5-flash",
+    model: "gemini-3.5-flash",
     client: {
       models: {
         async generateContent(params: unknown) {
@@ -300,9 +310,97 @@ test("executes mocked Gemini function calls and returns final answer", async () 
 
   assert.equal(response.geminiCalled, true);
   assert.equal(response.fallbackUsed, false);
-  assert.equal(response.answer, "Kategori terbesar tahun ini adalah Kebutuhan Rumah.");
+  assert.match(response.answer, /^Saya hanya melihat 2 transaksi pada periode ini\./);
+  assert.match(response.answer, /Kategori terbesar tahun ini adalah Kebutuhan Rumah\./);
   assert.equal(executedTools[0].userId, "user-1");
   assert.equal(executedTools[0].name, "getCategoryBreakdown");
   assert.deepEqual(executedTools[0].args, { period: "year", year: 2026, limit: 3 });
   assert.equal(response.toolCalls[0].resultCount, 1);
+});
+
+test("Gemini agent returns no-data answer when a tool result is empty", async () => {
+  const functionCall = {
+    id: "call-1",
+    name: "getLargestTransactions",
+    args: { period: "month", month: 5, year: 2026, limit: 3 }
+  };
+  let callCount = 0;
+  const geminiConfig = {
+    model: "gemini-3.5-flash",
+    client: {
+      models: {
+        async generateContent() {
+          callCount += 1;
+
+          if (callCount === 1) {
+            return {
+              functionCalls: [functionCall],
+              candidates: [{ content: { role: "model", parts: [{ functionCall }] } }]
+            } as never;
+          }
+
+          return {
+            functionCalls: undefined,
+            text: "Transaksi terbesar Anda adalah Rp99.999 di Toko Contoh."
+          } as never;
+        }
+      }
+    }
+  };
+
+  const response = await generateAssistantAgentAnswer({
+    userId: "user-1",
+    messages: [{ role: "user", content: "transaksi terbesar bulan ini apa?" }],
+    now: new Date(Date.UTC(2026, 4, 14)),
+    geminiConfig,
+    async executeTool() {
+      return [];
+    }
+  });
+
+  assert.equal(response.answer, "Saya tidak menemukan data pada periode tersebut.");
+});
+
+test("Gemini agent mentions limited transaction count", async () => {
+  const functionCall = {
+    id: "call-1",
+    name: "getSpendingSummary",
+    args: { period: "month", month: 5, year: 2026 }
+  };
+  let callCount = 0;
+  const geminiConfig = {
+    model: "gemini-3.5-flash",
+    client: {
+      models: {
+        async generateContent() {
+          callCount += 1;
+
+          if (callCount === 1) {
+            return {
+              functionCalls: [functionCall],
+              candidates: [{ content: { role: "model", parts: [{ functionCall }] } }]
+            } as never;
+          }
+
+          return {
+            functionCalls: undefined,
+            text: "Total pengeluaran Mei 2026 adalah Rp54.122."
+          } as never;
+        }
+      }
+    }
+  };
+
+  const response = await generateAssistantAgentAnswer({
+    userId: "user-1",
+    messages: [{ role: "user", content: "berapa total bulan ini?" }],
+    now: new Date(Date.UTC(2026, 4, 14)),
+    geminiConfig,
+    async executeTool() {
+      return { periodLabel: "Mei 2026", totalExpense: 54122, transactionCount: 1 };
+    }
+  });
+
+  assert.match(response.answer, /^Saya hanya melihat 1 transaksi pada periode ini\./);
+  assert.match(response.answer, /Total pengeluaran Mei 2026 adalah Rp54\.122\./);
 });

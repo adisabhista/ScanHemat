@@ -36,7 +36,8 @@ export function TransactionFilters({
   selectedStartDate,
   selectedEndDate,
   selectedCategoryId,
-  selectedSearch
+  selectedSearch,
+  selectedNeedsReview
 }: {
   categories: Category[];
   selectedPeriod: TransactionPeriod;
@@ -46,6 +47,7 @@ export function TransactionFilters({
   selectedEndDate?: string;
   selectedCategoryId?: string;
   selectedSearch?: string;
+  selectedNeedsReview?: boolean;
 }) {
   const [period, setPeriod] = useState<TransactionPeriod>(selectedPeriod);
   const [month, setMonth] = useState(selectedMonth);
@@ -54,6 +56,7 @@ export function TransactionFilters({
   const [endDate, setEndDate] = useState(selectedEndDate ?? "");
   const [categoryId, setCategoryId] = useState(selectedCategoryId ?? "");
   const [search, setSearch] = useState(selectedSearch ?? "");
+  const [needsReview, setNeedsReview] = useState(selectedNeedsReview ? "1" : "");
   const controls = getVisiblePeriodControls(period);
   const exportParams = useMemo(
     () =>
@@ -64,9 +67,10 @@ export function TransactionFilters({
         startDate,
         endDate,
         categoryId,
-        search
+        search,
+        needsReview: needsReview === "1"
       }),
-    [categoryId, endDate, month, period, search, startDate, year]
+    [categoryId, endDate, month, needsReview, period, search, startDate, year]
   );
 
   return (
@@ -118,6 +122,10 @@ export function TransactionFilters({
               {category.name}
             </option>
           ))}
+        </Select>
+        <Select value={needsReview} label="Status pengecekan" name="needsReview" onChange={(event) => setNeedsReview(event.target.value)}>
+          <option value="">Semua</option>
+          <option value="1">Perlu Dicek</option>
         </Select>
         <div className="flex items-end">
           <Button className="w-full" type="submit">

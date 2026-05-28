@@ -4,6 +4,7 @@ import Link from "next/link";
 import { CategoryBadge } from "@/components/ui/CategoryBadge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { QuickActionButton } from "@/components/ui/QuickActionButton";
+import { StatusBadge } from "@/components/ui/StatusBadge";
 import { TransactionSourceBadge } from "@/features/transactions/TransactionSourceBadge";
 import { formatCurrency } from "@/lib/format/currency";
 import { formatDate } from "@/lib/format/date";
@@ -53,7 +54,10 @@ export function TransactionTable({ transactions }: { transactions: TransactionWi
                 <tr className="transition hover:bg-slate-50 dark:hover:bg-slate-800/70" key={transaction.id}>
                   <td className="whitespace-nowrap px-4 py-3 text-slate-600 dark:text-slate-300">{formatDate(transaction.transactionDate)}</td>
                   <td className="px-4 py-3">
-                    <p className="font-semibold text-slate-900 dark:text-slate-100">{transaction.merchant || "Tanpa toko"}</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-semibold text-slate-900 dark:text-slate-100">{transaction.merchant || "Tanpa toko"}</p>
+                      {transaction.needsReview ? <StatusBadge tone="amber">Perlu Dicek</StatusBadge> : null}
+                    </div>
                     {transaction.notes ? <p className="mt-1 line-clamp-1 text-xs text-slate-500 dark:text-slate-400">{transaction.notes}</p> : null}
                   </td>
                   <td className="px-4 py-3">
@@ -93,6 +97,7 @@ export function TransactionTable({ transactions }: { transactions: TransactionWi
             <div className="mt-4 flex flex-wrap gap-2">
               <CategoryBadge color={transaction.category.color} name={transaction.category.name} />
               <TransactionSourceBadge source={transaction.source} />
+              {transaction.needsReview ? <StatusBadge tone="amber">Perlu Dicek</StatusBadge> : null}
             </div>
             {transaction.notes ? <p className="mt-3 line-clamp-2 text-sm text-slate-500">{transaction.notes}</p> : null}
           </Link>

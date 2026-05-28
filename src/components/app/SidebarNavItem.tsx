@@ -26,6 +26,7 @@ export function SidebarNavItem({ active, href, icon, isCollapsed, label }: Sideb
           : "text-slate-600 hover:bg-slate-50 hover:text-slate-950 dark:text-slate-300 dark:hover:bg-slate-900 dark:hover:text-slate-50"
       }`}
       href={href}
+      title={getSidebarTooltipLabel(label, isCollapsed)}
     >
       {active && isCollapsed ? <span className={getSidebarActiveMarkerClassName(active, isCollapsed)} aria-hidden="true" /> : null}
       <span className="flex size-5 shrink-0 items-center justify-center" aria-hidden="true">

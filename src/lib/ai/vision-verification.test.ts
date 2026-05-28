@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import test from "node:test";
 
-import { mergeVisionVerificationResult, shouldSuggestVisionVerification } from "@/lib/ai/vision-verification";
+import { applyVisionCorrection, mergeVisionVerificationResult, shouldSuggestVisionVerification } from "@/lib/ai/vision-verification";
 import type { AiReceiptVisionVerification } from "@/lib/ai/types";
 import type { ParsedReceipt } from "@/lib/parser/receipt-parser";
 
@@ -46,7 +48,7 @@ test("high confidence receipt does not trigger vision suggestion", () => {
   );
 });
 
-test("Shopee visual correction applies Total Pembayaran amount", () => {
+test("Shopee visual correction is stored without auto-applying Total Pembayaran amount", () => {
   const result = mergeVisionVerificationResult(
     buildParsedReceipt({
       totalAmount: 77600,
@@ -73,24 +75,46 @@ test("Shopee visual correction applies Total Pembayaran amount", () => {
     })
   );
 
-  assert.equal(result.totalAmount, 54122);
+  assert.equal(result.totalAmount, 77600);
   assert.equal(result.visionCorrections?.[0].newValue, 54122);
 });
 
-test("visual date correction keeps 16/05/26 as 2026-05-16", () => {
-  const result = mergeVisionVerificationResult(
-    buildParsedReceipt({ transactionDate: "2016-05-26" }),
-    buildVerification({
-      transactionDate: {
-        value: "2026-05-16",
-        confidence: 0.95,
-        sourceText: "16/05/26",
-        reason: "Format DD/MM/YY."
-      }
-    })
-  );
+test("accepted visual total correction updates total amount", () => {
+  const result = applyVisionCorrection(buildParsedReceipt({ totalAmount: 77600 }), {
+    field: "totalAmount",
+    oldValue: 77600,
+    newValue: 54122,
+    reason: "Total pembayaran akhir."
+  });
+
+  assert.equal(result.totalAmount, 54122);
+});
+
+test("vision verifier uses AI generation provider interface", () => {
+  const source = readFileSync(join(process.cwd(), "src", "lib", "ai", "providers", "gemini-vision-receipt-verifier.ts"), "utf-8");
+
+  assert.ok(source.includes("AiGenerationProvider"));
+  assert.ok(source.includes("generateMultimodalJson"));
+  assert.ok(!source.includes("GOOGLE_VERTEX_AI_PROJECT_ID"));
+  assert.ok(!source.includes("vertexai: true"));
+});
+
+test("accepted visual date correction keeps 16/05/26 as 2026-05-16", () => {
+  const result = applyVisionCorrection(buildParsedReceipt({ transactionDate: "2016-05-26" }), {
+    field: "transactionDate",
+    oldValue: "2016-05-26",
+    newValue: "2026-05-16",
+    sourceText: "16/05/26",
+    reason: "Format DD/MM/YY."
+  });
 
   assert.equal(result.transactionDate, "2026-05-16");
+});
+
+test("ignored visual correction keeps original value", () => {
+  const original = buildParsedReceipt({ totalAmount: 77600 });
+
+  assert.equal(original.totalAmount, 77600);
 });
 
 function buildParsedReceipt(overrides: Partial<ParsedReceipt> = {}): ParsedReceipt {

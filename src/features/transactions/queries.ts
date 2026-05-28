@@ -5,6 +5,35 @@ import { prisma } from "@/lib/prisma";
 
 export type { TransactionFilters, TransactionPeriod } from "@/features/transactions/period-filter";
 
+const defaultTransactionPageSize = 50;
+const transactionInclude = {
+  category: true,
+  receipt: true,
+  items: true
+} satisfies Prisma.TransactionInclude;
+
+const transactionOrderBy = [
+  { transactionDate: "desc" },
+  { id: "desc" }
+] satisfies Prisma.TransactionOrderByWithRelationInput[];
+
+export type TransactionWithRelations = Prisma.TransactionGetPayload<{
+  include: typeof transactionInclude;
+}>;
+
+export type TransactionPagination = {
+  take?: number;
+  cursor?: string;
+  skip?: number;
+};
+
+export type PaginatedTransactions = {
+  data: TransactionWithRelations[];
+  nextCursor: string | null;
+  hasMore: boolean;
+  totalCount?: number;
+};
+
 export function getMonthRange(year: number, month: number) {
   const start = new Date(Date.UTC(year, month - 1, 1));
   const end = new Date(Date.UTC(year, month, 1));
@@ -82,11 +111,10 @@ export function getFilterLabel(filters: TransactionFilters = {}, now = new Date(
   }).format(new Date(Date.UTC(normalized.year!, normalized.month! - 1, 1)));
 }
 
-export async function getTransactions(userId: string, filters: TransactionFilters = {}) {
+export function buildTransactionWhere(userId: string, filters: TransactionFilters = {}) {
   const where: Prisma.TransactionWhereInput = {
     userId
   };
-
   const { start, end } = getTransactionDateRange(filters);
 
   if (start || end) {
@@ -100,6 +128,10 @@ export async function getTransactions(userId: string, filters: TransactionFilter
     where.categoryId = filters.categoryId;
   }
 
+  if (filters.needsReview) {
+    where.needsReview = true;
+  }
+
   if (filters.search) {
     where.OR = [
       { merchant: { contains: filters.search, mode: "insensitive" } },
@@ -108,32 +140,87 @@ export async function getTransactions(userId: string, filters: TransactionFilter
     ];
   }
 
+  return where;
+}
+
+export async function getTransactions(
+  userId: string,
+  filters: TransactionFilters = {},
+  pagination: TransactionPagination = {}
+): Promise<PaginatedTransactions> {
+  const take = Math.max(1, Math.min(pagination.take ?? defaultTransactionPageSize, 100));
+  const where = buildTransactionWhere(userId, filters);
+  const [rows, totalCount] = await Promise.all([
+    prisma.transaction.findMany({
+      where,
+      include: transactionInclude,
+      orderBy: transactionOrderBy,
+      take: take + 1,
+      ...(pagination.cursor ? { cursor: { id: pagination.cursor }, skip: 1 } : pagination.skip ? { skip: pagination.skip } : {})
+    }),
+    prisma.transaction.count({ where })
+  ]);
+  const hasMore = rows.length > take;
+  const data = hasMore ? rows.slice(0, take) : rows;
+
+  return {
+    data,
+    nextCursor: hasMore ? data[data.length - 1]?.id ?? null : null,
+    hasMore,
+    totalCount
+  };
+}
+
+export async function getTransactionsForExport(userId: string, filters: TransactionFilters = {}) {
   return prisma.transaction.findMany({
-    where,
-    include: {
-      category: true,
-      receipt: true,
-      items: true
-    },
-    orderBy: {
-      transactionDate: "desc"
-    }
+    where: buildTransactionWhere(userId, filters),
+    include: transactionInclude,
+    orderBy: transactionOrderBy
   });
 }
 
 export async function getRecentTransactions(userId: string, filters: TransactionFilters = {}, take = 5) {
-  const transactions = await getTransactions(userId, filters);
-
-  return transactions.slice(0, take);
+  return prisma.transaction.findMany({
+    where: buildTransactionWhere(userId, filters),
+    include: transactionInclude,
+    orderBy: transactionOrderBy,
+    take
+  });
 }
 
 export async function getTransactionById(userId: string, id: string) {
   return prisma.transaction.findFirst({
     where: { id, userId },
-    include: {
-      category: true,
-      receipt: true,
-      items: true
-    }
+    include: transactionInclude
   });
+}
+
+export async function getNeedsReviewSummary(userId: string) {
+  const [count, firstTransaction] = await Promise.all([
+    prisma.transaction.count({
+      where: {
+        userId,
+        needsReview: true
+      }
+    }),
+    prisma.transaction.findFirst({
+      where: {
+        userId,
+        needsReview: true
+      },
+      orderBy: transactionOrderBy,
+      select: {
+        reviewReason: true
+      }
+    })
+  ]);
+
+  return {
+    count,
+    reason: getFirstReviewReason(firstTransaction?.reviewReason)
+  };
+}
+
+function getFirstReviewReason(value: Prisma.JsonValue | undefined) {
+  return Array.isArray(value) && typeof value[0] === "string" ? value[0] : null;
 }

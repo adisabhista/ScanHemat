@@ -35,6 +35,8 @@ export type ParsedReceipt = {
     oldValue: string | number | null;
     newValue: string | number | null;
     reason: string;
+    confidence?: number | null;
+    sourceText?: string | null;
   }[];
   category?: TransactionCategoryName;
   categoryId?: string;

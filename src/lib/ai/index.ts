@@ -1,5 +1,6 @@
 import { GeminiReceiptExtractor } from "./providers/gemini-receipt-extractor";
 import type { AiReceiptExtraction } from "./types";
+import { createAiGenerationProvider } from "./provider-selector";
 import {
   classifyReceiptCategory,
   getGeminiCategoryClassification
@@ -8,19 +9,15 @@ import { ParsedReceipt } from "@/lib/parser/receipt-parser";
 import { parseReceiptDateText, type ReceiptDateDebug } from "@/lib/parser/receipt-date-parser";
 
 export async function extractReceiptWithAi(rawText: string): Promise<AiReceiptExtraction | null> {
-  const provider = process.env.AI_EXTRACTOR_PROVIDER?.trim() || "gemini";
-  
-  if (provider === "none") {
+  const legacyProvider = process.env.AI_EXTRACTOR_PROVIDER?.trim();
+
+  if (legacyProvider === "none") {
     return null;
   }
 
-  if (provider === "gemini") {
-    const extractor = new GeminiReceiptExtractor();
-    return extractor.extract(rawText);
-  }
-
-  console.warn(`[AI] Unknown AI extractor provider: ${provider}`);
-  return null;
+  const generationProvider = await createAiGenerationProvider();
+  const extractor = new GeminiReceiptExtractor(generationProvider);
+  return extractor.extract(rawText);
 }
 
 function normalizeForAiValidation(value: string) {

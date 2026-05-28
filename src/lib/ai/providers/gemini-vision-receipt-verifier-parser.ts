@@ -33,7 +33,9 @@ const visionVerificationSchema = z.object({
         field: z.enum(["merchant", "transactionDate", "totalAmount", "items", "category"]),
         oldValue: z.union([z.string(), z.number(), z.null()]),
         newValue: z.union([z.string(), z.number(), z.null()]),
-        reason: z.string()
+        reason: z.string(),
+        confidence: z.coerce.number().min(0).max(1).nullable().optional(),
+        sourceText: z.string().nullable().optional()
       })
     )
     .default([])

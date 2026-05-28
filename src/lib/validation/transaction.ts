@@ -51,5 +51,6 @@ export const transactionFilterSchema = z.object({
   startDate: z.string().optional(),
   endDate: z.string().optional(),
   categoryId: z.string().optional(),
-  search: z.string().trim().max(100).optional()
+  search: z.string().trim().max(100).optional(),
+  needsReview: z.preprocess((value) => value === "1" || value === "true" || value === true, z.boolean().optional())
 });

@@ -1,6 +1,6 @@
 "use server";
 
-import { ReminderStatus } from "@prisma/client";
+import { Prisma, ReminderStatus } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
@@ -49,7 +49,7 @@ export async function createReminderAction(formData: FormData) {
       userId,
       title: parsed.data.title,
       type: parsed.data.type,
-      amount: parsed.data.amount ?? null,
+      amount: parsed.data.amount ? new Prisma.Decimal(parsed.data.amount) : null,
       dueDate: parsed.data.dueDate,
       reminderOffsets: parsed.data.reminderOffsets,
       repeatType: parsed.data.repeatType,
@@ -83,7 +83,7 @@ export async function updateReminderAction(id: string, formData: FormData) {
     data: {
       title: parsed.data.title,
       type: parsed.data.type,
-      amount: parsed.data.amount ?? null,
+      amount: parsed.data.amount ? new Prisma.Decimal(parsed.data.amount) : null,
       dueDate: parsed.data.dueDate,
       reminderOffsets: parsed.data.reminderOffsets,
       repeatType: parsed.data.repeatType,

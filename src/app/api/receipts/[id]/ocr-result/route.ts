@@ -5,6 +5,7 @@ import { requireUserId } from "@/lib/auth";
 import { generateReceiptAudit } from "@/lib/audit/receipt-audit";
 import { parseReceiptText } from "@/lib/parser/receipt-parser";
 import { prisma } from "@/lib/prisma";
+import { getReceiptReviewState } from "@/lib/review/review-state";
 
 const ocrResultSchema = z.object({
   rawText: z.string().max(100000)
@@ -34,13 +35,17 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     const parsedReceipt = parseReceiptText(parsed.data.rawText);
     parsedReceipt.audit = generateReceiptAudit({ rawText: parsed.data.rawText, parsedReceipt });
+    const reviewState = getReceiptReviewState(parsedReceipt);
     const updatedReceipt = await prisma.receipt.update({
       where: { id: receipt.id },
       data: {
         rawText: parsed.data.rawText,
         parsedData: parsedReceipt,
         status: "OCR_COMPLETED",
-        errorMessage: null
+        errorMessage: null,
+        needsReview: reviewState.needsReview,
+        reviewReasons: reviewState.reasons,
+        reviewedAt: null
       }
     });
 
@@ -48,7 +53,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       receiptId: updatedReceipt.id,
       filePath: updatedReceipt.filePath,
       mimeType: updatedReceipt.mimeType,
-      rawText: updatedReceipt.rawText ?? "",
       parsed: parsedReceipt
     });
   } catch (error) {

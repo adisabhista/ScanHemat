@@ -266,5 +266,5 @@ export async function getRecurringTransactionSuggestions(userId: string, now = n
 }
 
 function sumReminderAmounts(reminders: Pick<Reminder, "amount">[]) {
-  return reminders.reduce((sum, reminder) => sum + (reminder.amount ?? 0), 0);
+  return reminders.reduce((sum, reminder) => sum + (reminder.amount == null ? 0 : Number(reminder.amount)), 0);
 }

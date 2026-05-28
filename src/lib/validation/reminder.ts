@@ -15,7 +15,7 @@ const optionalShortTextSchema = z.preprocess(
 
 const optionalAmountSchema = z.preprocess(
   (value) => (typeof value === "string" && value.trim() === "" ? undefined : value),
-  z.coerce.number().int().positive("Nominal harus lebih dari 0.").max(2_000_000_000).optional().nullable()
+  z.coerce.number().positive("Nominal harus lebih dari 0.").max(2_000_000_000).optional().nullable()
 );
 
 const requiredDateSchema = z.preprocess(

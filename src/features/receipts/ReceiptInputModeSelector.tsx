@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode, SVGProps } from "react";
+import { Camera, Keyboard, UploadCloud, type LucideIcon } from "lucide-react";
 
 export type ReceiptInputMode = "manual" | "file" | "camera";
 
@@ -10,12 +10,10 @@ type ReceiptInputModeSelectorProps = {
   onModeChange: (mode: ReceiptInputMode) => void;
 };
 
-type ModeIconProps = SVGProps<SVGSVGElement>;
-
-const modes: Array<{ value: ReceiptInputMode; label: string; description: string; icon: (props: ModeIconProps) => ReactNode }> = [
-  { value: "manual", label: "Input Manual", description: "Untuk transaksi tanpa struk", icon: PencilLineIcon },
-  { value: "file", label: "Unggah File", description: "Untuk foto atau PDF e-receipt", icon: UploadCloudIcon },
-  { value: "camera", label: "Pindai Kamera", description: "Untuk struk fisik langsung", icon: CameraIcon }
+const modes: Array<{ value: ReceiptInputMode; label: string; description: string; icon: LucideIcon }> = [
+  { value: "manual", label: "Input Manual", description: "Untuk transaksi tanpa struk", icon: Keyboard },
+  { value: "file", label: "Unggah File", description: "Untuk foto atau PDF e-receipt", icon: UploadCloud },
+  { value: "camera", label: "Pindai Kamera", description: "Untuk struk fisik langsung", icon: Camera }
 ];
 
 export function ReceiptInputModeSelector({ disabled = false, mode, onModeChange }: ReceiptInputModeSelectorProps) {
@@ -25,6 +23,7 @@ export function ReceiptInputModeSelector({ disabled = false, mode, onModeChange 
       <div className="grid gap-3 sm:grid-cols-3">
         {modes.map((inputMode) => {
           const isSelected = inputMode.value === mode;
+          const Icon = inputMode.icon;
 
           return (
             <button
@@ -49,7 +48,7 @@ export function ReceiptInputModeSelector({ disabled = false, mode, onModeChange 
                   }`}
                   aria-hidden="true"
                 >
-                  {inputMode.icon({ className: "size-5" })}
+                  <Icon className="size-5" />
                 </span>
                 <span>
                   <span className="block font-semibold">{inputMode.label}</span>
@@ -61,33 +60,5 @@ export function ReceiptInputModeSelector({ disabled = false, mode, onModeChange 
         })}
       </div>
     </div>
-  );
-}
-
-function PencilLineIcon(props: ModeIconProps) {
-  return (
-    <svg fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" {...props}>
-      <path d="M12 20h9" />
-      <path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z" />
-    </svg>
-  );
-}
-
-function UploadCloudIcon(props: ModeIconProps) {
-  return (
-    <svg fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" {...props}>
-      <path d="M12 13v8" />
-      <path d="m16 17-4-4-4 4" />
-      <path d="M20.4 16.6A5 5 0 0 0 18 7h-1.3A8 8 0 1 0 4 14.9" />
-    </svg>
-  );
-}
-
-function CameraIcon(props: ModeIconProps) {
-  return (
-    <svg fill="none" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" viewBox="0 0 24 24" {...props}>
-      <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3Z" />
-      <circle cx="12" cy="13" r="3" />
-    </svg>
   );
 }

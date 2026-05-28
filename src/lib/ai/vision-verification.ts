@@ -1,5 +1,5 @@
 import type { AiCorrection, AiReceiptVisionVerification } from "@/lib/ai/types";
-import type { ParsedReceipt, ParsedReceiptItem, ReceiptTotalCandidate } from "@/lib/parser/receipt-parser";
+import type { ParsedReceipt, ReceiptTotalCandidate } from "@/lib/parser/receipt-parser";
 import { parseReceiptDateText } from "@/lib/parser/receipt-date-parser";
 
 const confidenceThreshold = 0.8;
@@ -61,45 +61,8 @@ export function mergeVisionVerificationResult(
       transactionDate: verification.transactionDate.confidence,
       totalAmount: verification.totalAmount.confidence
     },
-    visionCorrections: mergeCorrections(currentReceipt.visionCorrections, verification.corrections)
+    visionCorrections: mergeCorrections(currentReceipt.visionCorrections, enrichCorrections(verification))
   };
-
-  if (verification.merchant.value && verification.merchant.confidence >= confidenceThreshold) {
-    nextReceipt.merchant = verification.merchant.value;
-  }
-
-  if (verification.transactionDate.value && verification.transactionDate.confidence >= confidenceThreshold) {
-    const parsedDate = parseReceiptDateText(verification.transactionDate.sourceText ?? verification.transactionDate.value);
-
-    if (parsedDate.isoDate) {
-      nextReceipt.transactionDate = parsedDate.isoDate;
-      nextReceipt.dateDebug = [...(nextReceipt.dateDebug ?? []), parsedDate.debug];
-    } else {
-      const fallbackDate = parseReceiptDateText(verification.transactionDate.value);
-      if (fallbackDate.isoDate) {
-        nextReceipt.transactionDate = fallbackDate.isoDate;
-        nextReceipt.dateDebug = [...(nextReceipt.dateDebug ?? []), fallbackDate.debug];
-      }
-    }
-  }
-
-  if (
-    typeof verification.totalAmount.value === "number" &&
-    verification.totalAmount.value > 0 &&
-    verification.totalAmount.confidence >= confidenceThreshold
-  ) {
-    nextReceipt.totalAmount = verification.totalAmount.value;
-  }
-
-  const verifiedItems = verification.items.filter((item) => item.name.trim() && item.confidence >= confidenceThreshold);
-  if (verifiedItems.length > 0) {
-    nextReceipt.items = verifiedItems.map<ParsedReceiptItem>((item) => ({
-      name: item.name,
-      quantity: item.quantity ?? undefined,
-      unitPrice: item.unitPrice ?? undefined,
-      totalPrice: item.totalPrice ?? undefined
-    }));
-  }
 
   if (nextReceipt.fieldConfidences) {
     const confidenceValues = Object.values(nextReceipt.fieldConfidences).filter(
@@ -109,6 +72,39 @@ export function mergeVisionVerificationResult(
   }
 
   return nextReceipt;
+}
+
+export function applyVisionCorrection(currentReceipt: ParsedReceipt, correction: AiCorrection): ParsedReceipt {
+  if (correction.newValue === null) {
+    return currentReceipt;
+  }
+
+  if (correction.field === "merchant" && typeof correction.newValue === "string") {
+    return { ...currentReceipt, merchant: correction.newValue };
+  }
+
+  if (correction.field === "transactionDate" && typeof correction.newValue === "string") {
+    const parsedDate = parseReceiptDateText(correction.sourceText ?? correction.newValue);
+    const fallbackDate = parsedDate.isoDate ? parsedDate : parseReceiptDateText(correction.newValue);
+
+    return fallbackDate.isoDate
+      ? {
+          ...currentReceipt,
+          transactionDate: fallbackDate.isoDate,
+          dateDebug: [...(currentReceipt.dateDebug ?? []), fallbackDate.debug]
+        }
+      : currentReceipt;
+  }
+
+  if (correction.field === "totalAmount" && typeof correction.newValue === "number" && correction.newValue > 0) {
+    return { ...currentReceipt, totalAmount: correction.newValue };
+  }
+
+  if (correction.field === "category" && typeof correction.newValue === "string") {
+    return { ...currentReceipt, category: correction.newValue as ParsedReceipt["category"] };
+  }
+
+  return currentReceipt;
 }
 
 function hasConflictingTotalCandidates(totalCandidates: ReceiptTotalCandidate[] | undefined) {
@@ -145,5 +141,27 @@ function mergeCorrections(existing: AiCorrection[] | undefined, incoming: AiCorr
     }
     seen.add(key);
     return true;
+  });
+}
+
+function enrichCorrections(verification: AiReceiptVisionVerification) {
+  return verification.corrections.map((correction) => {
+    if (correction.confidence !== undefined || correction.sourceText !== undefined) {
+      return correction;
+    }
+
+    if (correction.field === "merchant") {
+      return { ...correction, confidence: verification.merchant.confidence, sourceText: verification.merchant.sourceText };
+    }
+
+    if (correction.field === "transactionDate") {
+      return { ...correction, confidence: verification.transactionDate.confidence, sourceText: verification.transactionDate.sourceText };
+    }
+
+    if (correction.field === "totalAmount") {
+      return { ...correction, confidence: verification.totalAmount.confidence, sourceText: verification.totalAmount.sourceText };
+    }
+
+    return correction;
   });
 }

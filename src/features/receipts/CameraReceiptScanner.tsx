@@ -19,6 +19,7 @@ type CameraReceiptScannerProps = {
 };
 
 const isDevelopment = process.env.NODE_ENV === "development";
+const cameraUnavailableMessage = "Kamera tidak tersedia. Coba periksa izin kamera di browser.";
 
 function logCamera(message: string, details?: unknown) {
   if (isDevelopment) {
@@ -38,7 +39,13 @@ export function CameraReceiptScanner({ disabled = false, onCancel, onCapture }: 
   const [isOpening, setIsOpening] = useState(true);
 
   const stopCamera = useCallback(() => {
-    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current?.getTracks().forEach((track) => {
+      try {
+        track.stop();
+      } catch (stopError) {
+        logCamera("failed to stop camera track", stopError);
+      }
+    });
     streamRef.current = null;
     logCamera("camera stopped");
   }, []);
@@ -57,9 +64,10 @@ export function CameraReceiptScanner({ disabled = false, onCancel, onCapture }: 
   const openCamera = useCallback(async () => {
     setError("");
     setIsOpening(true);
+    stopCamera();
 
     if (!hasCameraAccessSupport(navigator.mediaDevices)) {
-      setError("Browser tidak mendukung akses kamera.");
+      setError(cameraUnavailableMessage);
       setIsOpening(false);
       return;
     }
@@ -80,12 +88,17 @@ export function CameraReceiptScanner({ disabled = false, onCancel, onCapture }: 
 
       logCamera("camera opened");
     } catch (cameraError) {
-      setError("Kamera tidak dapat diakses. Periksa izin kamera browser.");
-      logCamera("camera permission denied", cameraError);
+      const errorName = cameraError instanceof DOMException ? cameraError.name : cameraError instanceof Error ? cameraError.name : "UnknownError";
+      setError(cameraUnavailableMessage);
+      logCamera(
+        errorName === "NotAllowedError" || errorName === "NotFoundError" ? "camera unavailable or permission denied" : "camera failed",
+        cameraError
+      );
+      stopCamera();
     } finally {
       setIsOpening(false);
     }
-  }, []);
+  }, [stopCamera]);
 
   useEffect(() => {
     const openTimer = window.setTimeout(() => {

@@ -16,7 +16,7 @@ import { getBudgets } from "@/features/budgets/queries";
 import { getReminderNotifications, getUpcomingRemindersForDashboard } from "@/features/reminders/queries";
 import { UpcomingRemindersWidget } from "@/features/reminders/UpcomingRemindersWidget";
 import { normalizeTransactionFilters, normalizeTransactionPeriod } from "@/features/transactions/period-filter";
-import { getFilterLabel, getMonthRange, getTransactions, getYearRange } from "@/features/transactions/queries";
+import { getFilterLabel, getMonthRange, getNeedsReviewSummary, getRecentTransactions, getTransactionsForExport, getYearRange } from "@/features/transactions/queries";
 import { requireUserId } from "@/lib/auth";
 import { formatCurrency } from "@/lib/format/currency";
 import { NEW_TRANSACTION_ROUTE, SCAN_RECEIPT_ROUTE } from "@/lib/routes";
@@ -66,30 +66,34 @@ export default async function DashboardPage({
   const budgetYear = filters.period === "month" ? filters.year ?? currentYear : currentYear;
   const { start, end } = getMonthRange(budgetYear, budgetMonth);
 
-  const [filteredTransactions, monthlyBudgets, budgetMonthTransactions, upcomingReminders, reminderNotifications] = await Promise.all([
-    getTransactions(userId, filters),
+  const [filteredTransactions, monthlyBudgets, budgetMonthTransactions, upcomingReminders, reminderNotifications, recentTransactions, needsReviewSummary] = await Promise.all([
+    getTransactionsForExport(userId, filters),
     getBudgets(userId, budgetYear, budgetMonth),
-    getTransactions(userId, { period: "month", year: budgetYear, month: budgetMonth }),
+    getTransactionsForExport(userId, { period: "month", year: budgetYear, month: budgetMonth }),
     getUpcomingRemindersForDashboard(userId, now, 3),
-    getReminderNotifications(userId, now)
+    getReminderNotifications(userId, now),
+    getRecentTransactions(userId, filters, 5),
+    getNeedsReviewSummary(userId)
   ]);
 
   const totalExpenses = filteredTransactions.reduce((sum, transaction) => sum + Number(transaction.totalAmount), 0);
-  const categoryTotals = filteredTransactions.reduce<Record<string, { id: string; name: string; total: number }>>((totals, transaction) => {
+  const categoryTotals = filteredTransactions.reduce<Record<string, { id: string; name: string; total: number; transactionCount: number }>>((totals, transaction) => {
     const current = totals[transaction.categoryId] ?? {
       id: transaction.categoryId,
       name: transaction.category.name,
-      total: 0
+      total: 0,
+      transactionCount: 0
     };
     totals[transaction.categoryId] = {
       ...current,
-      total: current.total + Number(transaction.totalAmount)
+      total: current.total + Number(transaction.totalAmount),
+      transactionCount: current.transactionCount + 1
     };
     return totals;
   }, {});
   const chartData = Object.values(categoryTotals);
   const highestCategory = [...chartData].sort((a, b) => b.total - a.total)[0];
-  const dashboardInsight = getDashboardInsight(chartData, totalExpenses);
+  const dashboardInsight = getDashboardInsight(chartData, totalExpenses, filteredTransactions.length, needsReviewSummary.count > 0);
   const budgetItems = monthlyBudgets.map((budget) => ({
     categoryName: budget.category.name,
     budgetAmount: Number(budget.amount),
@@ -97,7 +101,6 @@ export default async function DashboardPage({
       .filter((transaction) => transaction.categoryId === budget.categoryId)
       .reduce((sum, transaction) => sum + Number(transaction.totalAmount), 0)
   }));
-  const recentTransactions = filteredTransactions.slice(0, 5);
   const selectedYear = filters.year ?? currentYear;
   const yearlyBreakdown =
     filters.period === "year"
@@ -149,9 +152,16 @@ export default async function DashboardPage({
             <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600 dark:text-slate-300">{dashboardInsight.message}</p>
           </div>
           {dashboardInsight.actionHref && dashboardInsight.actionLabel ? (
-            <QuickActionButton href={dashboardInsight.actionHref} variant="secondary">
-              {dashboardInsight.actionLabel}
-            </QuickActionButton>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <QuickActionButton href={dashboardInsight.actionHref} variant="secondary">
+                {dashboardInsight.actionLabel}
+              </QuickActionButton>
+              {dashboardInsight.secondaryActionHref && dashboardInsight.secondaryActionLabel ? (
+                <QuickActionButton href={dashboardInsight.secondaryActionHref} variant="secondary">
+                  {dashboardInsight.secondaryActionLabel}
+                </QuickActionButton>
+              ) : null}
+            </div>
           ) : null}
         </div>
       </Card>
@@ -182,6 +192,23 @@ export default async function DashboardPage({
           tone="sky"
         />
       </div>
+
+      {needsReviewSummary.count > 0 ? (
+        <Card className="border-l-4 border-l-amber-400">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <StatusBadge tone="amber">Perlu Dicek</StatusBadge>
+              <p className="mt-3 text-2xl font-bold text-slate-950 dark:text-slate-100">{needsReviewSummary.count} transaksi</p>
+              <p className="mt-2 text-sm text-slate-600 dark:text-slate-300">
+                {needsReviewSummary.reason ?? "Ada transaksi yang perlu diperiksa manual."}
+              </p>
+            </div>
+            <QuickActionButton href="/transactions?needsReview=1" variant="secondary">
+              Tinjau sekarang
+            </QuickActionButton>
+          </div>
+        </Card>
+      ) : null}
 
       <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
         <DataCard title="Pengeluaran per Kategori" description="Lihat kategori yang paling banyak menyerap pengeluaran pada periode terpilih.">

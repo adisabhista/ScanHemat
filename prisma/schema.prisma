@@ -90,6 +90,9 @@ model Receipt {
   parsedData   Json?
   status       ReceiptStatus @default(UPLOADED)
   errorMessage String?
+  needsReview  Boolean       @default(false)
+  reviewReasons Json?
+  reviewedAt   DateTime?
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
 
@@ -97,6 +100,7 @@ model Receipt {
   transaction  Transaction?
 
   @@index([userId, createdAt])
+  @@index([userId, needsReview])
 }
 
 model Transaction {
@@ -109,6 +113,9 @@ model Transaction {
   totalAmount     Decimal           @db.Decimal(14, 2)
   notes           String?
   source          TransactionSource @default(MANUAL)
+  needsReview     Boolean           @default(false)
+  reviewReason    Json?
+  reviewedAt      DateTime?
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
 
@@ -119,6 +126,7 @@ model Transaction {
 
   @@index([userId, transactionDate])
   @@index([userId, categoryId])
+  @@index([userId, needsReview])
 }
 
 model TransactionItem {
@@ -155,7 +163,7 @@ model Reminder {
   userId              String
   title               String
   type                ReminderType
-  amount              Int?
+  amount              Decimal?       @db.Decimal(14, 2)
   dueDate             DateTime
   reminderOffsets     Int[]          @default([])
   repeatType          RepeatType     @default(NONE)

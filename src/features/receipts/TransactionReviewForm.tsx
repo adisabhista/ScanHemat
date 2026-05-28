@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/Input";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { Select } from "@/components/ui/Select";
 import { createTransactionAction } from "@/features/transactions/actions";
-import { shouldSuggestVisionVerification } from "@/lib/ai/vision-verification";
+import { applyVisionCorrection, shouldSuggestVisionVerification } from "@/lib/ai/vision-verification";
 import { formatCurrency } from "@/lib/format/currency";
 import { formatIndonesianDateLabel } from "@/lib/format/date";
 import type { ParsedReceiptItem, ParsedReceipt } from "@/lib/parser/receipt-parser";
@@ -51,15 +51,6 @@ export function TransactionReviewForm({
   const serializedItems = useMemo(() => JSON.stringify(items.filter((item) => item.name.trim())), [items]);
   const shouldShowVisionAction = shouldSuggestVisionVerification(currentReceipt);
 
-  function applyParsedReceipt(nextReceipt: ParsedReceipt) {
-    setCurrentReceipt(nextReceipt);
-    setMerchant(nextReceipt.merchant ?? "");
-    setItems(nextReceipt.items ?? []);
-    setTransactionDate(nextReceipt.transactionDate ?? getTodayInputValue());
-    setTotalAmount(nextReceipt.totalAmount?.toString() ?? "");
-    setCategoryId(nextReceipt.categoryId ?? defaultCategory?.id ?? "");
-  }
-
   function updateItem(index: number, field: keyof ParsedReceiptItem, value: string) {
     setItems((current) =>
       current.map((item, itemIndex) =>
@@ -87,9 +78,9 @@ export function TransactionReviewForm({
         throw new Error(payload.error || "Analisis AI Visual gagal. Mohon periksa hasil secara manual.");
       }
 
-      applyParsedReceipt(payload.parsed);
+      setCurrentReceipt(payload.parsed);
       setVisionStatus("success");
-      setVisionMessage("AI Visual selesai menganalisis struk.");
+      setVisionMessage("AI Visual selesai menganalisis struk. Rekomendasi perlu diterapkan manual.");
     } catch (error) {
       setVisionStatus("error");
       setVisionMessage(error instanceof Error ? error.message : "Analisis AI Visual gagal. Mohon periksa hasil secara manual.");
@@ -99,6 +90,37 @@ export function TransactionReviewForm({
   const datePreview = formatIndonesianDateLabel(transactionDate);
   const corrections = currentReceipt.visionCorrections ?? [];
   const audit = currentReceipt.audit;
+  const isMarkedForReview =
+    currentReceipt.confidence === "low" ||
+    corrections.length > 0 ||
+    (currentReceipt.warnings ?? []).length > 0 ||
+    (currentReceipt.audit?.warnings ?? []).length > 0;
+
+  function applyCorrection(correction: NonNullable<ParsedReceipt["visionCorrections"]>[number]) {
+    const nextReceipt = applyVisionCorrection(currentReceipt, correction);
+
+    setCurrentReceipt(nextReceipt);
+
+    if (correction.field === "merchant" && typeof correction.newValue === "string") {
+      setMerchant(correction.newValue);
+    }
+
+    if (correction.field === "transactionDate" && nextReceipt.transactionDate) {
+      setTransactionDate(nextReceipt.transactionDate);
+    }
+
+    if (correction.field === "totalAmount" && typeof correction.newValue === "number") {
+      setTotalAmount(String(correction.newValue));
+    }
+
+    if (correction.field === "category" && typeof correction.newValue === "string") {
+      const matchedCategory = categories.find((category) => category.name.toLocaleLowerCase("id-ID") === correction.newValue?.toString().toLocaleLowerCase("id-ID"));
+
+      if (matchedCategory) {
+        setCategoryId(matchedCategory.id);
+      }
+    }
+  }
 
   return (
     <Card>
@@ -116,6 +138,12 @@ export function TransactionReviewForm({
           </div>
         </div>
       )}
+
+      {isMarkedForReview ? (
+        <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100">
+          Hasil ini ditandai Perlu Dicek.
+        </div>
+      ) : null}
 
       {shouldShowVisionAction ? (
         <div className="mt-4 grid gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100">
@@ -141,12 +169,29 @@ export function TransactionReviewForm({
 
       {corrections.length > 0 ? (
         <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">
-          <h3 className="font-semibold text-slate-950">Saran AI Visual</h3>
-          <ul className="mt-2 list-disc space-y-1 pl-5">
+          <h3 className="font-semibold text-slate-950 dark:text-slate-100">Rekomendasi AI Visual</h3>
+          <p className="mt-1 text-amber-700 dark:text-amber-100">Periksa kembali rekomendasi AI sebelum menyimpan.</p>
+          <div className="mt-3 grid gap-3">
             {corrections.map((correction, index) => (
-              <li key={`${correction.field}-${index}`}>{formatCorrection(correction)}</li>
+              <div className="rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-900" key={`${correction.field}-${index}`}>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="font-semibold text-slate-950 dark:text-slate-100">{getCorrectionFieldLabel(correction.field)}</p>
+                    <p className="mt-1 text-sm">{formatCorrection(correction)}</p>
+                    <p className="mt-2 text-xs text-slate-500">
+                      Nilai lama: {formatCorrectionValue(correction.oldValue)} - Saran: {formatCorrectionValue(correction.newValue)}
+                    </p>
+                    {typeof correction.confidence === "number" ? (
+                      <p className="mt-1 text-xs text-slate-500">Keyakinan {Math.round(correction.confidence * 100)}%</p>
+                    ) : null}
+                  </div>
+                  <Button onClick={() => applyCorrection(correction)} type="button" variant="secondary">
+                    Terapkan
+                  </Button>
+                </div>
+              </div>
             ))}
-          </ul>
+          </div>
         </div>
       ) : null}
 
@@ -387,15 +432,19 @@ function formatAuditValue(value: string | number | null) {
 }
 
 function formatCorrection(correction: NonNullable<ParsedReceipt["visionCorrections"]>[number]) {
-  const fieldLabel: Record<typeof correction.field, string> = {
-    merchant: "merchant",
-    transactionDate: "tanggal",
-    totalAmount: "total",
-    items: "item",
-    category: "kategori"
+  return `AI Visual menyarankan ${getCorrectionFieldLabel(correction.field)} menjadi ${formatCorrectionValue(correction.newValue)} karena ${correction.reason}`;
+}
+
+function getCorrectionFieldLabel(field: NonNullable<ParsedReceipt["visionCorrections"]>[number]["field"]) {
+  const fieldLabel: Record<typeof field, string> = {
+    merchant: "Toko",
+    transactionDate: "Tanggal",
+    totalAmount: "Total",
+    items: "Item",
+    category: "Kategori"
   };
 
-  return `AI Visual menyarankan ${fieldLabel[correction.field]} ${formatCorrectionValue(correction.newValue)} karena ${correction.reason}`;
+  return fieldLabel[field];
 }
 
 function formatCorrectionValue(value: string | number | null) {

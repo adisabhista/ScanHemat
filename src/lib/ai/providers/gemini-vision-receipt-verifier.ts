@@ -1,10 +1,9 @@
 import "server-only";
 
-import { createPartFromBase64, GoogleGenAI } from "@google/genai";
-
 import { parseGeminiVisionVerificationText } from "@/lib/ai/providers/gemini-vision-receipt-verifier-parser";
 import type { AiReceiptVisionVerification } from "@/lib/ai/types";
 import type { ParsedReceipt } from "@/lib/parser/receipt-parser";
+import { getGeminiModelForRole, type AiGenerationProvider } from "./generation-provider";
 
 type VerifyReceiptInput = {
   imageBuffer: Buffer;
@@ -14,36 +13,16 @@ type VerifyReceiptInput = {
 };
 
 export function getGeminiVisionModel() {
-  return (
-    process.env.GEMINI_VISION_MODEL?.trim() ||
-    process.env.GEMINI_ASSISTANT_MODEL?.trim() ||
-    process.env.GEMINI_RECEIPT_MODEL?.trim()
-  );
+  return getGeminiModelForRole("vision");
 }
 
 export class GeminiVisionReceiptVerifier {
-  private client: GoogleGenAI;
   private model: string;
+  private provider: AiGenerationProvider;
 
-  constructor() {
-    const projectId = process.env.GOOGLE_VERTEX_AI_PROJECT_ID?.trim();
-    const location = process.env.GOOGLE_VERTEX_AI_LOCATION?.trim();
-    const model = getGeminiVisionModel();
-
-    if (!projectId || !location) {
-      throw new Error("Missing Vertex AI configuration: GOOGLE_VERTEX_AI_PROJECT_ID or GOOGLE_VERTEX_AI_LOCATION");
-    }
-
-    if (!model) {
-      throw new Error("Model Gemini Vision tidak tersedia. Atur GEMINI_VISION_MODEL atau GEMINI_RECEIPT_MODEL.");
-    }
-
-    this.client = new GoogleGenAI({
-      vertexai: true,
-      project: projectId,
-      location
-    });
-    this.model = model;
+  constructor(provider: AiGenerationProvider) {
+    this.provider = provider;
+    this.model = provider.getModel("vision");
   }
 
   getModelName() {
@@ -52,24 +31,22 @@ export class GeminiVisionReceiptVerifier {
 
   async verify(input: VerifyReceiptInput): Promise<AiReceiptVisionVerification> {
     const prompt = buildVisionPrompt(input.rawOcrText, input.currentExtraction);
-    const response = await this.client.models.generateContent({
+    return this.provider.generateMultimodalJson<AiReceiptVisionVerification>({
+      role: "vision",
       model: this.model,
-      contents: [
-        { text: prompt },
-        createPartFromBase64(input.imageBuffer.toString("base64"), input.mimeType)
-      ],
-      config: {
-        temperature: 0.1,
-        responseMimeType: "application/json"
-      }
+      modelEnvKey: "GEMINI_VISION_MODEL",
+      prompt,
+      file: {
+        content: input.imageBuffer,
+        mimeType: input.mimeType
+      },
+      parse: parseGeminiVisionVerificationTextValue
     });
-
-    if (!response.text) {
-      throw new Error("Empty response from Gemini Vision");
-    }
-
-    return parseGeminiVisionVerificationText(response.text);
   }
+}
+
+function parseGeminiVisionVerificationTextValue(value: unknown) {
+  return parseGeminiVisionVerificationText(JSON.stringify(value));
 }
 
 function buildVisionPrompt(rawOcrText: string, currentExtraction: ParsedReceipt) {

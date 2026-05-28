@@ -4,6 +4,7 @@ export type DashboardCategoryInsightInput = {
   id?: string;
   name: string;
   total: number;
+  transactionCount?: number;
 };
 
 export type DashboardInsight = {
@@ -12,9 +13,16 @@ export type DashboardInsight = {
   message: string;
   actionHref?: string;
   actionLabel?: string;
+  secondaryActionHref?: string;
+  secondaryActionLabel?: string;
 };
 
-export function getDashboardInsight(categories: DashboardCategoryInsightInput[], totalExpenses: number): DashboardInsight {
+export function getDashboardInsight(
+  categories: DashboardCategoryInsightInput[],
+  totalExpenses: number,
+  totalTransactions = 0,
+  hasReviewQueue = false
+): DashboardInsight {
   if (categories.length === 0 || totalExpenses <= 0) {
     return {
       tone: "info",
@@ -27,14 +35,22 @@ export function getDashboardInsight(categories: DashboardCategoryInsightInput[],
   const percentage = Math.round((highestCategory.total / totalExpenses) * 100);
   const otherCategory = categories.find((category) => category.name.toLocaleLowerCase("id-ID") === "lainnya");
   const otherPercentage = otherCategory ? Math.round((otherCategory.total / totalExpenses) * 100) : 0;
+  const otherTransactionPercentage =
+    otherCategory && totalTransactions > 0 ? Math.round(((otherCategory.transactionCount ?? 0) / totalTransactions) * 100) : 0;
 
-  if (otherCategory && (highestCategory.id === otherCategory.id || otherPercentage >= 30)) {
+  if (otherCategory && (highestCategory.id === otherCategory.id || otherPercentage > 30 || otherTransactionPercentage > 40)) {
     return {
       tone: "warning",
-      title: "Insight Bulan Ini",
-      message: "Kategori Lainnya masih besar. Tinjau transaksi agar laporan lebih akurat.",
+      title: "Kategori Lainnya masih besar",
+      message: "Rapikan kategori agar laporan pengeluaran lebih akurat.",
       actionHref: otherCategory.id ? `/transactions?categoryId=${otherCategory.id}` : "/transactions",
-      actionLabel: "Tinjau transaksi Lainnya"
+      actionLabel: "Tinjau Transaksi Lainnya",
+      ...(hasReviewQueue
+        ? {
+            secondaryActionHref: "/transactions?needsReview=1",
+            secondaryActionLabel: "Lihat yang Perlu Dicek"
+          }
+        : {})
     };
   }
 

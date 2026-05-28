@@ -1,5 +1,4 @@
-import { GoogleGenAI } from "@google/genai";
-
+import { createAiGenerationProvider } from "@/lib/ai/provider-selector";
 import { buildDeterministicAssistantAnswer } from "./service";
 import type { AssistantContext, AssistantMessage } from "./types";
 
@@ -20,25 +19,6 @@ Formatting:
 - Use bullet points when helpful.
 `;
 
-function createGeminiClient() {
-  const projectId = process.env.GOOGLE_VERTEX_AI_PROJECT_ID?.trim();
-  const location = process.env.GOOGLE_VERTEX_AI_LOCATION?.trim();
-  const model = process.env.GEMINI_RECEIPT_MODEL?.trim() || "gemini-3-flash-preview";
-
-  if (!projectId || !location) {
-    return null;
-  }
-
-  return {
-    model,
-    client: new GoogleGenAI({
-      vertexai: true,
-      project: projectId,
-      location
-    })
-  };
-}
-
 export async function generateAssistantAnswer({
   context,
   messages
@@ -53,9 +33,15 @@ export async function generateAssistantAnswer({
     };
   }
 
-  const gemini = createGeminiClient();
+  const provider = await createAiGenerationProvider().catch((error) => {
+    if (process.env.NODE_ENV === "development") {
+      console.warn("[Assistant] Gemini provider configuration failed", error);
+    }
 
-  if (!gemini) {
+    return null;
+  });
+
+  if (!provider) {
     return {
       answer: buildDeterministicAssistantAnswer(context),
       geminiCalled: false
@@ -81,19 +67,16 @@ ${JSON.stringify(context.period)}
 Data dari backend ScanHemat:
 ${JSON.stringify(context.data)}
 
-Tulis jawaban akhir untuk pengguna. Jika data tidak cukup, jawab persis:
+  Tulis jawaban akhir untuk pengguna. Jika data tidak cukup, jawab persis:
 Data transaksi belum cukup untuk membuat analisis yang akurat.`;
 
   try {
-    const response = await gemini.client.models.generateContent({
-      model: gemini.model,
-      contents: prompt,
-      config: {
-        temperature: 0.2
-      }
+    const answer = await provider.generateText({
+      role: "assistant",
+      prompt,
+      temperature: 0.2,
+      modelEnvKey: "GEMINI_ASSISTANT_MODEL"
     });
-
-    const answer = response.text?.trim();
 
     return {
       answer: answer || buildDeterministicAssistantAnswer(context),

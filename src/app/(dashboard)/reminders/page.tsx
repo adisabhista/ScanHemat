@@ -72,7 +72,7 @@ export default async function RemindersPage({ searchParams }: { searchParams: Re
     ? {
         title: editReminder.title,
         type: editReminder.type,
-        amount: editReminder.amount,
+        amount: editReminder.amount == null ? null : Number(editReminder.amount),
         dueDate: toInputDate(editReminder.dueDate),
         repeatType: editReminder.repeatType,
         reminderOffsets: editReminder.reminderOffsets,

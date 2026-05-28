@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
 import { ensureCategoryAccess } from "@/features/categories/queries";
+import { buildTransactionReviewData, markTransactionReviewedForUser, type ReceiptReviewData } from "@/features/transactions/review";
 import { requireUserId } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { DASHBOARD_ROUTE, NEW_TRANSACTION_ROUTE, SCAN_RECEIPT_ROUTE, TRANSACTIONS_ROUTE } from "@/lib/routes";
@@ -47,12 +48,19 @@ export async function createTransactionAction(formData: FormData) {
 
   await ensureCategoryAccess(userId, parsed.data.categoryId);
   let transactionSource: TransactionSource = TransactionSource.MANUAL;
+  let receiptReview: ReceiptReviewData = null;
 
   if (parsed.data.receiptId) {
     const receipt = await prisma.receipt.findFirst({
       where: {
         id: parsed.data.receiptId,
         userId
+      },
+      select: {
+        mimeType: true,
+        needsReview: true,
+        reviewReasons: true,
+        reviewedAt: true
       }
     });
 
@@ -60,6 +68,11 @@ export async function createTransactionAction(formData: FormData) {
       redirect(`${SCAN_RECEIPT_ROUTE}?error=${encodeURIComponent("Gagal menyimpan transaksi. Silakan coba lagi.")}`);
     }
 
+    receiptReview = {
+      needsReview: receipt.needsReview,
+      reviewReasons: receipt.reviewReasons,
+      reviewedAt: receipt.reviewedAt
+    };
     transactionSource = receipt.mimeType === "application/pdf" ? TransactionSource.PDF_OCR : TransactionSource.RECEIPT_OCR;
   }
 
@@ -73,6 +86,7 @@ export async function createTransactionAction(formData: FormData) {
       categoryId: parsed.data.categoryId,
       notes: parsed.data.notes || null,
       source: transactionSource,
+      ...buildTransactionReviewData(receiptReview),
       items: {
         create:
           parsed.data.items?.map((item) => ({
@@ -160,4 +174,18 @@ export async function deleteTransactionAction(id: string) {
   revalidatePath(DASHBOARD_ROUTE);
   revalidatePath(TRANSACTIONS_ROUTE);
   redirect(TRANSACTIONS_ROUTE);
+}
+
+export async function markTransactionReviewedAction(id: string) {
+  const userId = await requireUserId();
+  const result = await markTransactionReviewedForUser(userId, id);
+
+  if (!result) {
+    redirect(TRANSACTIONS_ROUTE);
+  }
+
+  revalidatePath(DASHBOARD_ROUTE);
+  revalidatePath(TRANSACTIONS_ROUTE);
+  revalidatePath(`/transactions/${id}`);
+  redirect(`/transactions/${id}`);
 }

@@ -214,7 +214,7 @@ export function buildDeterministicAssistantAnswer(context: AssistantContext) {
       return "Data transaksi belum cukup untuk membuat analisis yang akurat.";
     }
 
-    return "Saya tidak menemukan transaksi pada periode tersebut.";
+    return "Saya tidak menemukan data pada periode tersebut.";
   }
 
   if (context.intent === "spending_summary" && context.data.summary && typeof context.data.summary === "object") {

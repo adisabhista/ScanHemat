@@ -1,4 +1,6 @@
-import { extractReceiptWithAi } from "../src/lib/ai/index";
+import { createAiGenerationProvider, resolveAiGenerationProviderName } from "../src/lib/ai/provider-selector";
+import { GeminiReceiptExtractor } from "../src/lib/ai/providers/gemini-receipt-extractor";
+import { DEFAULT_GEMINI_PRIMARY_MODEL, getGeminiFallbackModel } from "../src/lib/ai/providers/generation-provider";
 import { parseReceiptText } from "../src/lib/parser/receipt-parser";
 import { readFileSync, existsSync } from "node:fs";
 import util from "node:util";
@@ -24,13 +26,13 @@ async function main() {
   }
 
   console.log("=== Environment Validation ===");
-  const envKeys = [
-    "AI_EXTRACTOR_PROVIDER",
-    "GOOGLE_VERTEX_AI_PROJECT_ID",
-    "GOOGLE_VERTEX_AI_LOCATION",
-    "GEMINI_RECEIPT_MODEL",
-    "GOOGLE_APPLICATION_CREDENTIALS"
-  ];
+  const provider = resolveAiGenerationProviderName();
+  const primaryModel = process.env.GEMINI_RECEIPT_MODEL?.trim() || DEFAULT_GEMINI_PRIMARY_MODEL;
+  const fallbackModel = getGeminiFallbackModel();
+  const envKeys =
+    provider === "vertex-ai"
+      ? ["GOOGLE_VERTEX_AI_PROJECT_ID", "GOOGLE_VERTEX_AI_LOCATION"]
+      : ["GEMINI_API_KEY"];
   const missingKeys = envKeys.filter(k => !process.env[k]);
   
   if (missingKeys.length > 0) {
@@ -38,24 +40,15 @@ async function main() {
     process.exit(1);
   }
 
-  console.log(`- Project: ${process.env.GOOGLE_VERTEX_AI_PROJECT_ID}`);
-  console.log(`- Location: ${process.env.GOOGLE_VERTEX_AI_LOCATION}`);
-  console.log(`- Model: ${process.env.GEMINI_RECEIPT_MODEL}`);
-  
-  const credPath = process.env.GOOGLE_APPLICATION_CREDENTIALS!;
-  console.log(`- Credentials Path: ${credPath}`);
-  
-  if (!existsSync(credPath)) {
-    console.error(`Error: Credential file not found at ${credPath}`);
-    process.exit(1);
-  } else {
-    try {
-      const creds = JSON.parse(readFileSync(credPath, "utf-8"));
-      console.log(`- Credential Client Email: ${creds.client_email}`);
-      console.log(`- Credential Project ID: ${creds.project_id}`);
-    } catch {
-      console.error("Error: Could not parse credential file as JSON.");
-    }
+  console.log(`- AI_GENERATION_PROVIDER: ${process.env.AI_GENERATION_PROVIDER || "gemini-api"}`);
+  console.log(`- Gemini provider selected: ${provider}`);
+  console.log(`- Primary model: ${primaryModel}`);
+  console.log(`- Fallback model: ${fallbackModel}`);
+  console.log(`- GEMINI_API_KEY exists: ${Boolean(process.env.GEMINI_API_KEY?.trim())}`);
+
+  if (provider === "vertex-ai") {
+    console.log(`- Vertex Project: ${process.env.GOOGLE_VERTEX_AI_PROJECT_ID}`);
+    console.log(`- Vertex Location: ${process.env.GOOGLE_VERTEX_AI_LOCATION}`);
   }
 
   const rawText = readFileSync(filePath, "utf-8");
@@ -65,13 +58,19 @@ async function main() {
   
   console.log("\n=== Running Gemini AI Extractor ===");
   try {
-    const aiResult = await extractReceiptWithAi(rawText);
+    const generationProvider = await createAiGenerationProvider();
+    const extractor = new GeminiReceiptExtractor(generationProvider);
+    const aiResult = await extractor.extract(rawText);
+    const providerDebug = generationProvider.getLastCallDebug?.();
     
     console.log("\n--- AI Result ---");
     console.log(util.inspect(aiResult, { depth: 10, colors: true }));
     
     console.log("\n--- Debug Info ---");
-    console.log(`Model: ${process.env.GEMINI_RECEIPT_MODEL || "gemini-3-flash-preview"}`);
+    console.log(`Provider: ${provider}`);
+    console.log(`Primary model: ${providerDebug?.primaryModel ?? primaryModel}`);
+    console.log(`Fallback model: ${providerDebug?.fallbackModel ?? fallbackModel}`);
+    console.log(`Fallback used: ${providerDebug?.fallbackUsed ?? false}`);
     console.log(`Merchant Source: ${aiResult?.merchant.sourceText}`);
     console.log(`Date Source: ${aiResult?.transactionDate.sourceText}`);
     console.log(`Total Source: ${aiResult?.totalAmount.sourceText}`);

@@ -1,11 +1,11 @@
 import {
   FunctionCallingConfigMode,
-  GoogleGenAI,
   type Content,
   type FunctionCall,
   type GenerateContentResponse
 } from "@google/genai";
 
+import { createAiGenerationProvider } from "@/lib/ai/provider-selector";
 import { assistantFunctionDeclarations } from "./tool-schemas";
 import { assistantSystemPrompt } from "./prompts";
 import { buildAssistantContext, buildDeterministicAssistantAnswer } from "./service";
@@ -16,6 +16,8 @@ export type AssistantAgentToolCallDebug = {
   name: string;
   args: Record<string, unknown>;
   resultCount: number;
+  transactionCount?: number;
+  failed?: boolean;
 };
 
 export type AssistantAgentResponse = {
@@ -45,25 +47,39 @@ type GeminiConfig = {
 type AssistantToolExecutor = (userId: string, name: string, args: unknown, now: Date) => Promise<unknown>;
 
 const maxFunctionCallingRounds = 4;
+const noDataPeriodAnswer = "Saya tidak menemukan data pada periode tersebut.";
+const limitedTransactionThreshold = 3;
+const transactionCountToolNames = new Set([
+  "getSpendingSummary",
+  "getCategoryBreakdown",
+  "getMerchantBreakdown",
+  "getLargestTransactions",
+  "getMonthlyBreakdown",
+  "getRecentTransactions",
+  "getSmallFrequentTransactions",
+  "getItemPriceHistory"
+]);
 
-function createGeminiConfig(): GeminiConfig | null {
-  const projectId = process.env.GOOGLE_VERTEX_AI_PROJECT_ID?.trim();
-  const location = process.env.GOOGLE_VERTEX_AI_LOCATION?.trim();
-  const credentials = process.env.GOOGLE_APPLICATION_CREDENTIALS?.trim();
-  const model = process.env.GEMINI_ASSISTANT_MODEL?.trim() || process.env.GEMINI_RECEIPT_MODEL?.trim();
+async function createGeminiConfig(): Promise<GeminiConfig | null> {
+  try {
+    const provider = await createAiGenerationProvider();
+    const model = provider.getModel("assistant");
 
-  if (!projectId || !location || !credentials || !model) {
+    return {
+      model,
+      client: {
+        models: {
+          generateContent: (params) => provider.generateContent(params, { role: "assistant", modelEnvKey: "GEMINI_ASSISTANT_MODEL" })
+        }
+      }
+    };
+  } catch (error) {
+    if (process.env.NODE_ENV === "development") {
+      console.warn("[Assistant] Gemini provider configuration failed", error);
+    }
+
     return null;
   }
-
-  return {
-    model,
-    client: new GoogleGenAI({
-      vertexai: true,
-      project: projectId,
-      location
-    })
-  };
 }
 
 function toGeminiContents(messages: AssistantMessage[]): Content[] {
@@ -102,6 +118,78 @@ function getResolvedPeriodFromCalls(toolCalls: AssistantAgentToolCallDebug[]) {
   return JSON.stringify({ period, month, year, startDate, endDate });
 }
 
+function getObjectTransactionCount(value: Record<string, unknown>): number | undefined {
+  if (typeof value.transactionCount === "number") {
+    return value.transactionCount;
+  }
+
+  if (typeof value.count === "number") {
+    return value.count;
+  }
+
+  if (value.summary && typeof value.summary === "object" && !Array.isArray(value.summary)) {
+    return getObjectTransactionCount(value.summary as Record<string, unknown>);
+  }
+
+  if (Array.isArray(value.transactions)) {
+    return value.transactions.length;
+  }
+
+  return undefined;
+}
+
+function getToolTransactionCount(name: string, result: unknown): number | undefined {
+  if (!transactionCountToolNames.has(name)) {
+    return undefined;
+  }
+
+  if (Array.isArray(result)) {
+    if (result.length === 0) {
+      return 0;
+    }
+
+    const itemCounts = result
+      .map((item) => (item && typeof item === "object" && !Array.isArray(item) ? getObjectTransactionCount(item as Record<string, unknown>) : undefined))
+      .filter((count): count is number => typeof count === "number");
+
+    if (itemCounts.length > 0) {
+      return itemCounts.reduce((total, count) => total + count, 0);
+    }
+
+    return result.length;
+  }
+
+  if (result && typeof result === "object") {
+    return getObjectTransactionCount(result as Record<string, unknown>);
+  }
+
+  return undefined;
+}
+
+function formatGuardedAssistantAnswer(answer: string, toolCalls: AssistantAgentToolCallDebug[]) {
+  const successfulToolCalls = toolCalls.filter((toolCall) => !toolCall.failed);
+
+  if (successfulToolCalls.some((toolCall) => toolCall.resultCount === 0)) {
+    return noDataPeriodAnswer;
+  }
+
+  const transactionCounts = successfulToolCalls
+    .map((toolCall) => toolCall.transactionCount)
+    .filter((count): count is number => typeof count === "number");
+  const visibleTransactionCount = transactionCounts.length > 0 ? Math.max(...transactionCounts) : undefined;
+
+  if (
+    typeof visibleTransactionCount === "number" &&
+    visibleTransactionCount > 0 &&
+    visibleTransactionCount < limitedTransactionThreshold &&
+    !answer.includes("Saya hanya melihat")
+  ) {
+    return `Saya hanya melihat ${visibleTransactionCount} transaksi pada periode ini.\n\n${answer}`;
+  }
+
+  return answer;
+}
+
 async function fallbackAnswer(userId: string, messages: AssistantMessage[], now: Date, model?: string): Promise<AssistantAgentResponse> {
   const context = await buildAssistantContext(userId, messages, now);
 
@@ -129,7 +217,7 @@ export async function generateAssistantAgentAnswer({
   userId,
   messages,
   now = new Date(),
-  geminiConfig = createGeminiConfig(),
+  geminiConfig,
   executeTool = executeAssistantTool
 }: {
   userId: string;
@@ -138,7 +226,9 @@ export async function generateAssistantAgentAnswer({
   geminiConfig?: GeminiConfig | null;
   executeTool?: AssistantToolExecutor;
 }): Promise<AssistantAgentResponse> {
-  if (!geminiConfig) {
+  const resolvedGeminiConfig = geminiConfig === undefined ? await createGeminiConfig() : geminiConfig;
+
+  if (!resolvedGeminiConfig) {
     return fallbackAnswer(userId, messages, now);
   }
 
@@ -147,8 +237,8 @@ export async function generateAssistantAgentAnswer({
 
   try {
     for (let round = 0; round < maxFunctionCallingRounds; round += 1) {
-      const response = await geminiConfig.client.models.generateContent({
-        model: geminiConfig.model,
+      const response = await resolvedGeminiConfig.client.models.generateContent({
+        model: resolvedGeminiConfig.model,
         contents,
         config: {
           temperature: 0.2,
@@ -168,16 +258,16 @@ export async function generateAssistantAgentAnswer({
 
         if (answer) {
           return {
-            answer,
+            answer: formatGuardedAssistantAnswer(answer, toolCalls),
             geminiCalled: true,
             fallbackUsed: false,
-            model: geminiConfig.model,
+            model: resolvedGeminiConfig.model,
             toolCalls,
             resolvedPeriod: getResolvedPeriodFromCalls(toolCalls)
           };
         }
 
-        return fallbackAnswer(userId, messages, now, geminiConfig.model);
+        return fallbackAnswer(userId, messages, now, resolvedGeminiConfig.model);
       }
 
       contents.push(getCandidateContent(response, functionCalls));
@@ -192,7 +282,8 @@ export async function generateAssistantAgentAnswer({
             toolCalls.push({
               name,
               args,
-              resultCount: getToolResultCount(result)
+              resultCount: getToolResultCount(result),
+              transactionCount: getToolTransactionCount(name, result)
             });
 
             return {
@@ -206,7 +297,8 @@ export async function generateAssistantAgentAnswer({
             toolCalls.push({
               name,
               args,
-              resultCount: 0
+              resultCount: 0,
+              failed: true
             });
 
             return {
@@ -228,12 +320,12 @@ export async function generateAssistantAgentAnswer({
       });
     }
 
-    return fallbackAnswer(userId, messages, now, geminiConfig.model);
+    return fallbackAnswer(userId, messages, now, resolvedGeminiConfig.model);
   } catch (error) {
     if (process.env.NODE_ENV === "development") {
       console.warn("[Assistant] Gemini function calling failed", error);
     }
 
-    return fallbackAnswer(userId, messages, now, geminiConfig.model);
+    return fallbackAnswer(userId, messages, now, resolvedGeminiConfig.model);
   }
 }

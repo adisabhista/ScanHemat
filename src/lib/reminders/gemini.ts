@@ -1,6 +1,7 @@
-import { GoogleGenAI } from "@google/genai";
 import { ReminderType, RepeatType } from "@prisma/client";
 import { z } from "zod";
+
+import { createAiGenerationProvider } from "@/lib/ai/provider-selector";
 
 const draftSchema = z.object({
   title: z.string().trim().min(1).max(200),
@@ -87,26 +88,6 @@ const knownBanks = [
 ] as const;
 
 const monthNamePattern = "januari|jan|februari|feb|maret|mar|april|apr|mei|juni|jun|juli|jul|agustus|agu|ags|september|sep|sept|oktober|okt|november|nov|desember|des";
-
-function createGeminiClient() {
-  const projectId = process.env.GOOGLE_VERTEX_AI_PROJECT_ID?.trim();
-  const location = process.env.GOOGLE_VERTEX_AI_LOCATION?.trim();
-  const credentials = process.env.GOOGLE_APPLICATION_CREDENTIALS?.trim();
-  const model = process.env.GEMINI_ASSISTANT_MODEL?.trim() || process.env.GEMINI_RECEIPT_MODEL?.trim();
-
-  if (!projectId || !location || !credentials || !model) {
-    return null;
-  }
-
-  return {
-    model,
-    client: new GoogleGenAI({
-      vertexai: true,
-      project: projectId,
-      location
-    })
-  };
-}
 
 function normalizeWhitespace(value: string) {
   return value.replace(/\s+/g, " ").trim();
@@ -446,54 +427,35 @@ export function suggestReminderFromTextFallback(text: string, now = new Date()):
   };
 }
 
-function parseJsonObject(text: string) {
-  const match = text.match(/\{[\s\S]*\}/);
-
-  if (!match) {
-    return null;
-  }
-
-  try {
-    return JSON.parse(match[0]) as unknown;
-  } catch {
-    return null;
-  }
-}
-
 export async function suggestReminderFromText(text: string, now = new Date()): Promise<ReminderDraft> {
   const fallback = suggestReminderFromTextFallback(text, now);
-  const gemini = createGeminiClient();
-
-  if (!gemini) {
-    return fallback;
-  }
 
   try {
-    const response = await gemini.client.models.generateContent({
-      model: gemini.model,
-      contents: [
+    const provider = await createAiGenerationProvider();
+    return await provider.generateJson<ReminderDraft>({
+      role: "assistant",
+      modelEnvKey: "GEMINI_ASSISTANT_MODEL",
+      prompt: [
         {
           role: "user",
           parts: [
             {
-              text: `Tanggal hari ini ${now.toISOString().slice(0, 10)}. Ubah teks pengingat ke JSON saja. Enum type: SUBSCRIPTION, BILL, VEHICLE_TAX, STNK, SIM, WARRANTY, LICENSE, DOCUMENT, OTHER. Enum repeatType: NONE, WEEKLY, MONTHLY, YEARLY, CUSTOM. Format dueDate YYYY-MM-DD atau null. Teks: ${text}`
+              text: `Tanggal hari ini ${now.toISOString().slice(0, 10)}. Ubah teks pengingat ke JSON saja. Enum type: SUBSCRIPTION, BILL, VEHICLE_TAX, STNK, SIM, WARRANTY, LICENSE, DOCUMENT, OTHER. Enum repeatType: NONE, WEEKLY, MONTHLY, YEARLY, CUSTOM. Format dueDate YYYY-MM-DD atau null. Jangan menebak amount jika nominal tidak tertulis eksplisit. Untuk valid thru "September 2026", gunakan dueDate 2026-09-30. Untuk "tanggal 20", gunakan kejadian bulanan berikutnya. Normalisasi merchant umum seperti BCA, IndiHome, YouTube Premium, Spotify, Netflix, dan Google One. Teks: ${text}`
             }
           ]
         }
       ],
-      config: {
-        temperature: 0.1,
-        responseMimeType: "application/json"
+      parse(value) {
+        const parsed = draftSchema.safeParse(value);
+
+        if (!parsed.success) {
+          throw parsed.error;
+        }
+
+        return parsed.data;
       }
     });
-    const parsed = draftSchema.safeParse(parseJsonObject(response.text ?? ""));
-
-    if (parsed.success) {
-      return parsed.data;
-    }
   } catch {
     return fallback;
   }
-
-  return fallback;
 }

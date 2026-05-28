@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
 import { Select } from "@/components/ui/Select";
-import { deleteTransactionAction, updateTransactionAction } from "@/features/transactions/actions";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { deleteTransactionAction, markTransactionReviewedAction, updateTransactionAction } from "@/features/transactions/actions";
 import { TransactionSourceBadge } from "@/features/transactions/TransactionSourceBadge";
 import { toInputDate, formatIndonesianDateLabel } from "@/lib/format/date";
 
@@ -30,6 +31,8 @@ export function TransactionEditForm({
     totalAmount: { toString(): string };
     notes: string | null;
     source: "MANUAL" | "RECEIPT_OCR" | "PDF_OCR";
+    needsReview: boolean;
+    reviewReason: unknown;
     items: TransactionItem[];
   };
   categories: Category[];
@@ -59,6 +62,10 @@ export function TransactionEditForm({
   );
   const updateAction = updateTransactionAction.bind(null, transaction.id);
   const deleteAction = deleteTransactionAction.bind(null, transaction.id);
+  const markReviewedAction = markTransactionReviewedAction.bind(null, transaction.id);
+  const reviewReasons = Array.isArray(transaction.reviewReason)
+    ? transaction.reviewReason.filter((reason): reason is string => typeof reason === "string")
+    : [];
 
   function updateItem(index: number, field: keyof EditableItem, value: string) {
     setItems((current) => current.map((item, itemIndex) => (itemIndex === index ? { ...item, [field]: value } : item)));
@@ -70,8 +77,23 @@ export function TransactionEditForm({
     <Card>
       <div className="mb-4 flex items-center justify-between gap-3">
         <h2 className="text-base font-semibold text-slate-950">Detail Transaksi</h2>
-        <TransactionSourceBadge source={transaction.source} />
+        <div className="flex flex-wrap justify-end gap-2">
+          {transaction.needsReview ? <StatusBadge tone="amber">Perlu Dicek</StatusBadge> : null}
+          <TransactionSourceBadge source={transaction.source} />
+        </div>
       </div>
+      {transaction.needsReview ? (
+        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-100">
+          <p className="font-semibold">Transaksi ini ditandai Perlu Dicek.</p>
+          {reviewReasons.length > 0 ? (
+            <ul className="mt-2 list-disc space-y-1 pl-5">
+              {reviewReasons.map((reason, index) => (
+                <li key={`${reason}-${index}`}>{reason}</li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
       <form action={updateAction} className="grid gap-4">
         <input name="items" type="hidden" value={serializedItems} />
         <Input defaultValue={transaction.merchant ?? ""} label="Toko" name="merchant" />
@@ -149,6 +171,11 @@ export function TransactionEditForm({
           <Button formAction={deleteAction} type="submit" variant="danger">
             Hapus
           </Button>
+          {transaction.needsReview ? (
+            <Button formAction={markReviewedAction} type="submit" variant="secondary">
+              Tandai Sudah Dicek
+            </Button>
+          ) : null}
         </div>
       </form>
     </Card>

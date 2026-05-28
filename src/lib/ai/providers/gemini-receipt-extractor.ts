@@ -1,27 +1,11 @@
-import { GoogleGenAI } from "@google/genai";
 import type { AiReceiptExtraction, AiReceiptExtractor } from "@/lib/ai/types";
+import type { AiGenerationProvider } from "./generation-provider";
 
 export class GeminiReceiptExtractor implements AiReceiptExtractor {
-  private client: GoogleGenAI;
-  private model: string;
+  private provider: AiGenerationProvider;
 
-  constructor() {
-    const projectId = process.env.GOOGLE_VERTEX_AI_PROJECT_ID?.trim();
-    const location = process.env.GOOGLE_VERTEX_AI_LOCATION?.trim();
-    const model = process.env.GEMINI_RECEIPT_MODEL?.trim() || "gemini-3-flash-preview";
-    
-    // We expect GOOGLE_APPLICATION_CREDENTIALS to be set and picked up automatically
-    // by the Vertex auth flow, but we MUST pass vertexai configuration.
-    if (!projectId || !location) {
-      throw new Error("Missing Vertex AI configuration: GOOGLE_VERTEX_AI_PROJECT_ID or GOOGLE_VERTEX_AI_LOCATION");
-    }
-
-    this.client = new GoogleGenAI({
-      vertexai: true,
-      project: projectId,
-      location: location
-    });
-    this.model = model;
+  constructor(provider: AiGenerationProvider) {
+    this.provider = provider;
   }
 
   async extract(rawText: string): Promise<AiReceiptExtraction> {
@@ -76,37 +60,10 @@ Teks OCR:
 ${rawText}
 `;
 
-    try {
-      const response = await this.client.models.generateContent({
-        model: this.model,
-        contents: prompt,
-        config: {
-          temperature: 0.1,
-          responseMimeType: "application/json"
-        }
-      });
-
-      const text = response.text;
-      if (!text) throw new Error("Empty response from Gemini");
-
-      // Strip any markdown blocks if the model ignored our request
-      const jsonStr = text.replace(/^```json\n?/i, "").replace(/\n?```$/i, "").trim();
-      
-      try {
-        const parsed = JSON.parse(jsonStr) as AiReceiptExtraction;
-        return parsed;
-      } catch {
-        console.error("[AI] Failed to parse JSON from Gemini:", jsonStr);
-        throw new Error("Invalid JSON returned from AI model");
-      }
-    } catch (error: unknown) {
-      console.error("[AI] Gemini extraction failed:", error);
-      
-      if (error instanceof Error && error.message.toLowerCase().includes("not found")) {
-        throw new Error("Model Gemini tidak tersedia di Vertex AI. Periksa GEMINI_RECEIPT_MODEL.");
-      }
-      
-      throw error;
-    }
+    return this.provider.generateJson<AiReceiptExtraction>({
+      role: "receipt",
+      prompt,
+      modelEnvKey: "GEMINI_RECEIPT_MODEL"
+    });
   }
 }

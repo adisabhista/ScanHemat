@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import test from "node:test";
-import { ReminderStatus, ReminderType, RepeatType } from "@prisma/client";
+import { Prisma, ReminderStatus, ReminderType, RepeatType } from "@prisma/client";
 
 import { assistantFunctionDeclarations, upcomingRemindersArgsSchema } from "@/lib/assistant/tool-schemas";
 import { reminderSchema } from "@/lib/validation/reminder";
@@ -84,9 +86,9 @@ test("formats overdue reminder label", () => {
 test("builds upcoming expense summary", () => {
   const summary = buildUpcomingExpenseSummaryFromReminders(
     [
-      { amount: 59000, dueDate: new Date(Date.UTC(2026, 5, 10)) },
-      { amount: 350000, dueDate: new Date(Date.UTC(2026, 5, 28)) },
-      { amount: 100000, dueDate: new Date(Date.UTC(2026, 4, 20)) }
+      { amount: new Prisma.Decimal(59000), dueDate: new Date(Date.UTC(2026, 5, 10)) },
+      { amount: new Prisma.Decimal(350000), dueDate: new Date(Date.UTC(2026, 5, 28)) },
+      { amount: new Prisma.Decimal(100000), dueDate: new Date(Date.UTC(2026, 4, 20)) }
     ],
     new Date(Date.UTC(2026, 5, 1))
   );
@@ -118,6 +120,7 @@ test("declares assistant reminder tools", () => {
 
 test("formats Rupiah and Indonesian dates", () => {
   assert.equal(formatReminderAmount(350000), "Rp350.000");
+  assert.equal(formatReminderAmount(new Prisma.Decimal(255300)), "Rp255.300");
   assert.equal(formatReminderDate("2026-06-05"), "5 Juni 2026");
 });
 
@@ -252,6 +255,14 @@ test("suggests subscription reminder from text", () => {
   assert.equal(draft.amount, 59000);
   assert.equal(draft.repeatType, RepeatType.MONTHLY);
   assert.equal(draft.dueDate, "2026-06-10");
+});
+
+test("reminder parser uses AI generation provider selector", () => {
+  const source = readFileSync(join(process.cwd(), "src", "lib", "reminders", "gemini.ts"), "utf-8");
+
+  assert.ok(source.includes("createAiGenerationProvider"));
+  assert.ok(!source.includes("GOOGLE_VERTEX_AI_PROJECT_ID"));
+  assert.ok(!source.includes("vertexai: true"));
 });
 
 test("suggests IndiHome subscription reminder from Indonesian quick text", () => {
