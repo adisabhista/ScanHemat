@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 
 import { TransactionItemsEditor, shouldShowUnitPrice } from "@/features/transactions/TransactionItemsEditor";
 
-test("transaction item editor renders clear desktop headers", () => {
+test("transaction item editor renders responsive labels and wide desktop headers", () => {
   const markup = renderToStaticMarkup(
     createElement(TransactionItemsEditor, {
       items: [{ name: "DIAMOND UHT F/CRM", quantity: "1", unitPrice: "21990", totalPrice: "21990" }],
@@ -19,8 +19,11 @@ test("transaction item editor renders clear desktop headers", () => {
   assert.match(markup, /Total Item/);
   assert.match(markup, /Aksi/);
   assert.match(markup, /Harga satuan boleh kosong jika tidak terbaca dari struk\./);
-  assert.match(markup, /sm:grid-cols-2/);
-  assert.match(markup, /xl:grid-cols-\[minmax\(280px,1fr\)_96px_150px_150px_88px\]/);
+  assert.match(markup, /md:grid-cols-\[minmax\(80px,96px\)_minmax\(0,1fr\)_minmax\(0,1fr\)_88px\]/);
+  assert.match(markup, /2xl:grid-cols-\[minmax\(320px,1fr\)_96px_150px_150px_80px\]/);
+  assert.match(markup, /2xl:contents/);
+  assert.match(markup, /h-10 min-w-20 text-center" aria-label="Qty"/);
+  assert.match(markup, />Hapus<\/button>/);
 });
 
 test("simple item with missing unit price shows an empty disabled field", () => {

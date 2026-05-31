@@ -48,7 +48,7 @@ export function TransactionItemsEditor({
       </div>
       {items.length === 0 ? <p className="text-sm text-slate-500">Belum ada item.</p> : null}
       {items.length > 0 ? (
-        <div className="hidden grid-cols-[minmax(280px,1fr)_96px_150px_150px_88px] gap-3 px-3 text-xs font-semibold uppercase text-slate-500 xl:grid">
+        <div className="hidden grid-cols-[minmax(320px,1fr)_96px_150px_150px_80px] gap-3 px-3 text-xs font-semibold uppercase text-slate-500 2xl:grid">
           <span>Nama Item</span>
           <span className="text-center">Qty</span>
           <span className="text-right">Harga Satuan</span>
@@ -61,11 +61,11 @@ export function TransactionItemsEditor({
 
         return (
           <div
-            className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3 sm:grid-cols-2 xl:grid-cols-[minmax(280px,1fr)_96px_150px_150px_88px] xl:items-end dark:border-slate-700 dark:bg-slate-800/30"
+            className="grid w-full min-w-0 gap-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3 2xl:grid-cols-[minmax(320px,1fr)_96px_150px_150px_80px] 2xl:items-end dark:border-slate-700 dark:bg-slate-800/30"
             key={index}
           >
-            <div className="grid gap-1.5 sm:col-span-2 xl:col-span-1">
-              <span className="text-xs font-semibold text-slate-500 xl:hidden">Nama Item</span>
+            <div className="grid min-w-0 gap-1.5">
+              <span className="text-xs font-semibold text-slate-500 2xl:hidden">Nama Item</span>
               <Input
                 aria-label="Nama Item"
                 className="h-10"
@@ -74,62 +74,64 @@ export function TransactionItemsEditor({
                 value={item.name}
               />
             </div>
-            <div className="grid gap-1.5">
-              <span className="text-xs font-semibold text-slate-500 xl:hidden">Qty</span>
-              <Input
-                aria-label="Qty"
-                className="h-10 text-center"
-                inputMode="decimal"
-                min="0"
-                onChange={(event) => updateItem(index, "quantity", event.target.value)}
-                placeholder="1"
-                step="any"
-                type="number"
-                value={item.quantity ?? ""}
-              />
-            </div>
-            {showUnitPrice ? (
-              <div className="grid gap-1.5">
-                <span className="text-xs font-semibold text-slate-500 xl:hidden">Harga Satuan</span>
+            <div className="grid w-full min-w-0 gap-3 sm:grid-cols-2 md:grid-cols-[minmax(80px,96px)_minmax(0,1fr)_minmax(0,1fr)_88px] 2xl:contents">
+              <div className="grid min-w-0 gap-1.5">
+                <span className="text-xs font-semibold text-slate-500 2xl:hidden">Qty</span>
+                <Input
+                  aria-label="Qty"
+                  className="h-10 min-w-20 text-center"
+                  inputMode="decimal"
+                  min="0"
+                  onChange={(event) => updateItem(index, "quantity", event.target.value)}
+                  placeholder="1"
+                  step="any"
+                  type="number"
+                  value={item.quantity ?? ""}
+                />
+              </div>
+              {showUnitPrice ? (
+                <div className="grid min-w-0 gap-1.5">
+                  <span className="text-xs font-semibold text-slate-500 2xl:hidden">Harga Satuan</span>
+                  <RupiahInput
+                    aria-label="Harga Satuan"
+                    className="h-10 text-right"
+                    min="0"
+                    onValueChange={(value) => updateItem(index, "unitPrice", value)}
+                    placeholder="Harga satuan"
+                    value={item.unitPrice ?? ""}
+                  />
+                </div>
+              ) : (
+                <div className="grid min-w-0 gap-1.5">
+                  <span className="text-xs font-semibold text-slate-500 2xl:hidden">Harga Satuan</span>
+                  <Input
+                    aria-label="Harga Satuan"
+                    className="h-10 cursor-not-allowed bg-slate-100 text-right dark:bg-slate-800"
+                    disabled
+                    placeholder=""
+                    value=""
+                  />
+                </div>
+              )}
+              <div className="grid min-w-0 gap-1.5">
+                <span className="text-xs font-semibold text-slate-500 2xl:hidden">Total Item</span>
                 <RupiahInput
-                  aria-label="Harga Satuan"
+                  aria-label="Total Item"
                   className="h-10 text-right"
                   min="0"
-                  onValueChange={(value) => updateItem(index, "unitPrice", value)}
-                  placeholder="Harga satuan"
-                  value={item.unitPrice ?? ""}
+                  onValueChange={(value) => updateItem(index, "totalPrice", value)}
+                  placeholder="Total item"
+                  value={item.totalPrice ?? ""}
                 />
               </div>
-            ) : (
-              <div className="grid gap-1.5">
-                <span className="text-xs font-semibold text-slate-500 xl:hidden">Harga Satuan</span>
-                <Input
-                  aria-label="Harga Satuan"
-                  className="h-10 cursor-not-allowed bg-slate-100 text-right dark:bg-slate-800"
-                  disabled
-                  placeholder=""
-                  value=""
-                />
-              </div>
-            )}
-            <div className="grid gap-1.5">
-              <span className="text-xs font-semibold text-slate-500 xl:hidden">Total Item</span>
-              <RupiahInput
-                aria-label="Total Item"
-                className="h-10 text-right"
-                min="0"
-                onValueChange={(value) => updateItem(index, "totalPrice", value)}
-                placeholder="Total item"
-                value={item.totalPrice ?? ""}
-              />
+              <button
+                className="h-10 w-full self-end rounded-xl px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-500 dark:hover:bg-red-500/10"
+                onClick={() => onItemsChange(items.filter((_, itemIndex) => itemIndex !== index))}
+                type="button"
+              >
+                Hapus
+              </button>
             </div>
-            <button
-              className="h-10 rounded-xl px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-500 sm:col-span-2 sm:justify-self-end xl:col-span-1 xl:w-full xl:justify-self-center dark:hover:bg-red-500/10"
-              onClick={() => onItemsChange(items.filter((_, itemIndex) => itemIndex !== index))}
-              type="button"
-            >
-              Hapus
-            </button>
           </div>
         );
       })}
