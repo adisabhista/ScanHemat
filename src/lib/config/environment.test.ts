@@ -18,7 +18,7 @@ const validEnvironment = {
   GEMINI_ASSISTANT_MODEL: "gemini-3.5-flash",
   GEMINI_VISION_MODEL: "gemini-3.5-flash",
   GEMINI_FALLBACK_MODEL: "gemini-2.5-flash",
-  RECEIPT_EXTRACTION_STRATEGY: "hybrid",
+  RECEIPT_EXTRACTION_STRATEGY: "hybrid-auto",
   RECEIPT_STORAGE_PROVIDER: "gcs",
   GCS_RECEIPT_BUCKET: "bucket"
 };

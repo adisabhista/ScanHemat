@@ -161,6 +161,8 @@ GOOGLE_DOCUMENT_AI_PROCESSOR_ID
 
 `CLOUD_SQL_INSTANCE` uses `PROJECT:REGION:INSTANCE`. `NEXTAUTH_URL` must use the deployed HTTPS URL. No Google JSON key is required in GitHub.
 
+Add each value as a separate repository variable. Do not paste the full configuration block into one variable. The deploy preflight fails before authentication and names any missing or malformed variable.
+
 `.github/workflows/ci.yml` runs Prisma generation, type checking, linting, tests, and the Next build without calling real Google APIs. `.github/workflows/deploy-gcp.yml` authenticates through Workload Identity Federation, pushes app and migration images to Artifact Registry, runs the Cloud Run migration job, and deploys the service only after migrations succeed.
 
 ## Manual Deployment
@@ -209,6 +211,9 @@ These limits are per Cloud Run instance. Replace them with Memorystore Redis or 
 ## Troubleshooting
 
 - Prisma cannot connect to Cloud SQL: confirm `DATABASE_URL`, the Cloud SQL attachment, `roles/cloudsql.client`, and the socket instance name.
+- Workload Identity authentication fails before Docker build: confirm `GCP_WORKLOAD_IDENTITY_PROVIDER` and `GCP_SERVICE_ACCOUNT` are separate repository variables. `GCP_WORKLOAD_IDENTITY_PROVIDER` must use `projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/POOL/providers/PROVIDER`.
+- Migration job exits with code `127`: confirm the job image was built from the Docker `migration-runner` target. The app `runner` image intentionally does not include `npm`.
+- PostgreSQL reports `public.User does not exist`: migrations did not complete. Run `gcloud run jobs executions list --job scanhemat-migrate --region "$REGION"` and inspect the latest execution.
 - Prisma client is missing during build: run `npm run prisma:generate`; both Docker targets already do this.
 - Document AI permission is denied: confirm the processor project, location, ID, API enablement, and runtime service-account Document AI role.
 - Document AI authentication fails locally: set a readable `GOOGLE_APPLICATION_CREDENTIALS` path. In Cloud Run, confirm the attached runtime service account instead.

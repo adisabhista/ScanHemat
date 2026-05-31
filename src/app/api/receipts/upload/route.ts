@@ -97,7 +97,7 @@ export async function POST(request: Request) {
       storageProvider: resolveReceiptStorageProviderName(),
       ocrProvider: process.env.OCR_PROVIDER?.trim() || "google-document-ai",
       aiProvider: process.env.AI_GENERATION_PROVIDER?.trim() || "gemini-api",
-      extractionStrategy: process.env.RECEIPT_EXTRACTION_STRATEGY?.trim() || "hybrid"
+      extractionStrategy: process.env.RECEIPT_EXTRACTION_STRATEGY?.trim() || "hybrid-auto"
     });
     const storedFile = await storage.saveReceipt(parsedFile.data.file, userId, receiptId);
     let receipt;

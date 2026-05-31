@@ -10,10 +10,6 @@ permissions:
   contents: read
   id-token: write
 
-env:
-  IMAGE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.ARTIFACT_REGISTRY_REPOSITORY }}/scanhemat:${{ github.sha }}
-  MIGRATION_IMAGE: ${{ vars.GCP_REGION }}-docker.pkg.dev/${{ vars.GCP_PROJECT_ID }}/${{ vars.ARTIFACT_REGISTRY_REPOSITORY }}/scanhemat-migrations:${{ github.sha }}
-
 jobs:
   validate:
     runs-on: ubuntu-latest
@@ -31,7 +27,7 @@ jobs:
       GEMINI_ASSISTANT_MODEL: gemini-3.5-flash
       GEMINI_VISION_MODEL: gemini-3.5-flash
       GEMINI_FALLBACK_MODEL: gemini-2.5-flash
-      RECEIPT_EXTRACTION_STRATEGY: hybrid
+      RECEIPT_EXTRACTION_STRATEGY: hybrid-auto
       RECEIPT_STORAGE_PROVIDER: local
     steps:
       - uses: actions/checkout@v4
@@ -48,6 +44,87 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Validate deployment variables
+        shell: bash
+        env:
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GCP_REGION: ${{ vars.GCP_REGION }}
+          CLOUD_RUN_SERVICE: ${{ vars.CLOUD_RUN_SERVICE }}
+          CLOUD_RUN_SERVICE_ACCOUNT: ${{ vars.CLOUD_RUN_SERVICE_ACCOUNT }}
+          CLOUD_SQL_INSTANCE: ${{ vars.CLOUD_SQL_INSTANCE }}
+          ARTIFACT_REGISTRY_REPOSITORY: ${{ vars.ARTIFACT_REGISTRY_REPOSITORY }}
+          GCS_RECEIPT_BUCKET: ${{ vars.GCS_RECEIPT_BUCKET }}
+          NEXTAUTH_URL: ${{ vars.NEXTAUTH_URL }}
+          GOOGLE_CLOUD_LOCATION: ${{ vars.GOOGLE_CLOUD_LOCATION }}
+          GOOGLE_DOCUMENT_AI_PROCESSOR_ID: ${{ vars.GOOGLE_DOCUMENT_AI_PROCESSOR_ID }}
+          GCP_WORKLOAD_IDENTITY_PROVIDER: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          GCP_SERVICE_ACCOUNT: ${{ vars.GCP_SERVICE_ACCOUNT }}
+        run: |
+          missing=0
+          invalid=0
+          required_vars=(
+            "GCP_PROJECT_ID"
+            "GCP_REGION"
+            "CLOUD_RUN_SERVICE"
+            "CLOUD_RUN_SERVICE_ACCOUNT"
+            "CLOUD_SQL_INSTANCE"
+            "ARTIFACT_REGISTRY_REPOSITORY"
+            "GCS_RECEIPT_BUCKET"
+            "NEXTAUTH_URL"
+            "GOOGLE_CLOUD_LOCATION"
+            "GOOGLE_DOCUMENT_AI_PROCESSOR_ID"
+            "GCP_WORKLOAD_IDENTITY_PROVIDER"
+            "GCP_SERVICE_ACCOUNT"
+          )
+
+          for name in "${required_vars[@]}"; do
+            value="${!name:-}"
+            if [ -z "$value" ]; then
+              echo "::error::$name is missing. Add it in GitHub repo Settings > Secrets and variables > Actions > Variables."
+              missing=1
+            fi
+          done
+
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+
+          if [[ ! "$GCP_WORKLOAD_IDENTITY_PROVIDER" =~ ^projects/[0-9]+/locations/global/workloadIdentityPools/[^/]+/providers/[^/]+$ ]]; then
+            echo "::error::GCP_WORKLOAD_IDENTITY_PROVIDER has an invalid format. Expected projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/POOL/providers/PROVIDER."
+            invalid=1
+          fi
+
+          if [[ ! "$GCP_SERVICE_ACCOUNT" =~ ^[^@[:space:]]+@[^@[:space:]]+\.iam\.gserviceaccount\.com$ ]]; then
+            echo "::error::GCP_SERVICE_ACCOUNT must be a Google service account email."
+            invalid=1
+          fi
+
+          if [[ ! "$CLOUD_RUN_SERVICE_ACCOUNT" =~ ^[^@[:space:]]+@[^@[:space:]]+\.iam\.gserviceaccount\.com$ ]]; then
+            echo "::error::CLOUD_RUN_SERVICE_ACCOUNT must be a Google service account email."
+            invalid=1
+          fi
+
+          if [[ ! "$NEXTAUTH_URL" =~ ^https:// ]]; then
+            echo "::error::NEXTAUTH_URL must use HTTPS."
+            invalid=1
+          fi
+
+          if [[ ! "$CLOUD_SQL_INSTANCE" =~ ^[^:]+:[^:]+:[^:]+$ ]]; then
+            echo "::error::CLOUD_SQL_INSTANCE must use PROJECT:REGION:INSTANCE format."
+            invalid=1
+          fi
+
+          if [[ "$GOOGLE_DOCUMENT_AI_PROCESSOR_ID" =~ ^(replace-|isi_|your-|placeholder) ]]; then
+            echo "::error::GOOGLE_DOCUMENT_AI_PROCESSOR_ID still contains a placeholder value."
+            invalid=1
+          fi
+
+          if [ "$invalid" -ne 0 ]; then
+            exit 1
+          fi
+
+          echo "IMAGE=${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${ARTIFACT_REGISTRY_REPOSITORY}/scanhemat:${GITHUB_SHA}" >> "$GITHUB_ENV"
+          echo "MIGRATION_IMAGE=${GCP_REGION}-docker.pkg.dev/${GCP_PROJECT_ID}/${ARTIFACT_REGISTRY_REPOSITORY}/scanhemat-migrations:${GITHUB_SHA}" >> "$GITHUB_ENV"
       - uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}
@@ -84,6 +161,6 @@ jobs:
             --service-account "${{ vars.CLOUD_RUN_SERVICE_ACCOUNT }}" \
             --set-cloudsql-instances "${{ vars.CLOUD_SQL_INSTANCE }}" \
             --allow-unauthenticated \
-            --set-env-vars "APP_VERSION=${{ github.sha }},NEXTAUTH_URL=${{ vars.NEXTAUTH_URL }},MAX_RECEIPT_UPLOAD_MB=8,OCR_PROVIDER=google-document-ai,GOOGLE_CLOUD_PROJECT_ID=${{ vars.GCP_PROJECT_ID }},GOOGLE_CLOUD_LOCATION=${{ vars.GOOGLE_CLOUD_LOCATION }},GOOGLE_DOCUMENT_AI_PROCESSOR_ID=${{ vars.GOOGLE_DOCUMENT_AI_PROCESSOR_ID }},AI_GENERATION_PROVIDER=gemini-api,GEMINI_RECEIPT_MODEL=gemini-3.5-flash,GEMINI_ASSISTANT_MODEL=gemini-3.5-flash,GEMINI_VISION_MODEL=gemini-3.5-flash,GEMINI_FALLBACK_MODEL=gemini-2.5-flash,RECEIPT_EXTRACTION_STRATEGY=hybrid,RECEIPT_STORAGE_PROVIDER=gcs,GCS_RECEIPT_BUCKET=${{ vars.GCS_RECEIPT_BUCKET }}" \
+            --set-env-vars "APP_VERSION=${{ github.sha }},NEXTAUTH_URL=${{ vars.NEXTAUTH_URL }},MAX_RECEIPT_UPLOAD_MB=8,OCR_PROVIDER=google-document-ai,GOOGLE_CLOUD_PROJECT_ID=${{ vars.GCP_PROJECT_ID }},GOOGLE_CLOUD_LOCATION=${{ vars.GOOGLE_CLOUD_LOCATION }},GOOGLE_DOCUMENT_AI_PROCESSOR_ID=${{ vars.GOOGLE_DOCUMENT_AI_PROCESSOR_ID }},AI_GENERATION_PROVIDER=gemini-api,GEMINI_RECEIPT_MODEL=gemini-3.5-flash,GEMINI_ASSISTANT_MODEL=gemini-3.5-flash,GEMINI_VISION_MODEL=gemini-3.5-flash,GEMINI_FALLBACK_MODEL=gemini-2.5-flash,RECEIPT_EXTRACTION_STRATEGY=hybrid-auto,RECEIPT_STORAGE_PROVIDER=gcs,GCS_RECEIPT_BUCKET=${{ vars.GCS_RECEIPT_BUCKET }}" \
             --set-secrets "DATABASE_URL=scanhemat-database-url:latest,NEXTAUTH_SECRET=scanhemat-nextauth-secret:latest,GEMINI_API_KEY=scanhemat-gemini-api-key:latest" \
             --quiet
