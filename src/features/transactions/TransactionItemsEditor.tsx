@@ -32,9 +32,14 @@ export function TransactionItemsEditor({
   return (
     <div className="grid gap-3">
       <div className="flex items-center justify-between gap-3">
-        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Item opsional</h3>
+        <div>
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">Item opsional</h3>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+            Harga satuan boleh kosong jika tidak terbaca dari struk.
+          </p>
+        </div>
         <button
-          className="text-sm font-semibold text-brand-700 dark:text-brand-100"
+          className="shrink-0 text-sm font-semibold text-brand-700 dark:text-brand-100"
           onClick={() => onItemsChange([...items, { name: "" }])}
           type="button"
         >
@@ -43,12 +48,12 @@ export function TransactionItemsEditor({
       </div>
       {items.length === 0 ? <p className="text-sm text-slate-500">Belum ada item.</p> : null}
       {items.length > 0 ? (
-        <div className="hidden grid-cols-[minmax(0,1fr)_72px_140px_140px_auto] gap-2 px-3 text-xs font-semibold uppercase text-slate-500 sm:grid">
+        <div className="hidden grid-cols-[minmax(280px,1fr)_96px_150px_150px_88px] gap-3 px-3 text-xs font-semibold uppercase text-slate-500 xl:grid">
           <span>Nama Item</span>
-          <span>Qty</span>
-          <span>Harga Satuan</span>
-          <span>Total Item</span>
-          <span className="text-right">Aksi</span>
+          <span className="text-center">Qty</span>
+          <span className="text-right">Harga Satuan</span>
+          <span className="text-right">Total Item</span>
+          <span className="text-center">Aksi</span>
         </div>
       ) : null}
       {items.map((item, index) => {
@@ -56,22 +61,24 @@ export function TransactionItemsEditor({
 
         return (
           <div
-            className="grid gap-3 rounded-xl border border-slate-200 p-3 sm:grid-cols-[minmax(0,1fr)_72px_140px_140px_auto] sm:items-end sm:gap-2 dark:border-slate-700"
+            className="grid gap-3 rounded-xl border border-slate-200 bg-slate-50/60 p-3 sm:grid-cols-2 xl:grid-cols-[minmax(280px,1fr)_96px_150px_150px_88px] xl:items-end dark:border-slate-700 dark:bg-slate-800/30"
             key={index}
           >
-            <div className="grid gap-1.5">
-              <span className="text-xs font-semibold text-slate-500 sm:hidden">Nama Item</span>
+            <div className="grid gap-1.5 sm:col-span-2 xl:col-span-1">
+              <span className="text-xs font-semibold text-slate-500 xl:hidden">Nama Item</span>
               <Input
                 aria-label="Nama Item"
+                className="h-10"
                 onChange={(event) => updateItem(index, "name", event.target.value)}
                 placeholder="Nama item"
                 value={item.name}
               />
             </div>
             <div className="grid gap-1.5">
-              <span className="text-xs font-semibold text-slate-500 sm:hidden">Qty</span>
+              <span className="text-xs font-semibold text-slate-500 xl:hidden">Qty</span>
               <Input
                 aria-label="Qty"
+                className="h-10 text-center"
                 inputMode="decimal"
                 min="0"
                 onChange={(event) => updateItem(index, "quantity", event.target.value)}
@@ -83,9 +90,10 @@ export function TransactionItemsEditor({
             </div>
             {showUnitPrice ? (
               <div className="grid gap-1.5">
-                <span className="text-xs font-semibold text-slate-500 sm:hidden">Harga Satuan</span>
+                <span className="text-xs font-semibold text-slate-500 xl:hidden">Harga Satuan</span>
                 <RupiahInput
                   aria-label="Harga Satuan"
+                  className="h-10 text-right"
                   min="0"
                   onValueChange={(value) => updateItem(index, "unitPrice", value)}
                   placeholder="Harga satuan"
@@ -93,12 +101,22 @@ export function TransactionItemsEditor({
                 />
               </div>
             ) : (
-              <span className="hidden min-h-10 items-center text-sm text-slate-400 sm:flex">-</span>
+              <div className="grid gap-1.5">
+                <span className="text-xs font-semibold text-slate-500 xl:hidden">Harga Satuan</span>
+                <Input
+                  aria-label="Harga Satuan"
+                  className="h-10 cursor-not-allowed bg-slate-100 text-right dark:bg-slate-800"
+                  disabled
+                  placeholder=""
+                  value=""
+                />
+              </div>
             )}
             <div className="grid gap-1.5">
-              <span className="text-xs font-semibold text-slate-500 sm:hidden">Total Item</span>
+              <span className="text-xs font-semibold text-slate-500 xl:hidden">Total Item</span>
               <RupiahInput
                 aria-label="Total Item"
+                className="h-10 text-right"
                 min="0"
                 onValueChange={(value) => updateItem(index, "totalPrice", value)}
                 placeholder="Total item"
@@ -106,7 +124,7 @@ export function TransactionItemsEditor({
               />
             </div>
             <button
-              className="rounded-xl px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-500 sm:justify-self-end dark:hover:bg-red-500/10"
+              className="h-10 rounded-xl px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-500 sm:col-span-2 sm:justify-self-end xl:col-span-1 xl:w-full xl:justify-self-center dark:hover:bg-red-500/10"
               onClick={() => onItemsChange(items.filter((_, itemIndex) => itemIndex !== index))}
               type="button"
             >

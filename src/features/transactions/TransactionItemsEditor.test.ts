@@ -18,10 +18,13 @@ test("transaction item editor renders clear desktop headers", () => {
   assert.match(markup, /Harga Satuan/);
   assert.match(markup, /Total Item/);
   assert.match(markup, /Aksi/);
+  assert.match(markup, /Harga satuan boleh kosong jika tidak terbaca dari struk\./);
+  assert.match(markup, /sm:grid-cols-2/);
+  assert.match(markup, /xl:grid-cols-\[minmax\(280px,1fr\)_96px_150px_150px_88px\]/);
 });
 
-test("simple one-unit item shows only the total item money field", () => {
-  const item = { name: "DIAMOND UHT F/CRM", quantity: "1", unitPrice: "21990", totalPrice: "21990" };
+test("simple item with missing unit price shows an empty disabled field", () => {
+  const item = { name: "DIAMOND UHT F/CRM", quantity: "1", totalPrice: "21990" };
   const markup = renderToStaticMarkup(
     createElement(TransactionItemsEditor, {
       items: [item],
@@ -30,7 +33,7 @@ test("simple one-unit item shows only the total item money field", () => {
   );
 
   assert.equal(shouldShowUnitPrice(item), false);
-  assert.doesNotMatch(markup, /aria-label="Harga Satuan"/);
+  assert.match(markup, /aria-label="Harga Satuan" disabled="" placeholder="" value=""/);
   assert.match(markup, /aria-label="Total Item"/);
   assert.match(markup, /value="21\.990"/);
 });
@@ -49,4 +52,5 @@ test("quantity item shows formatted unit and total price fields", () => {
   assert.match(markup, /aria-label="Total Item"/);
   assert.match(markup, /value="21\.990"/);
   assert.match(markup, /value="43\.980"/);
+  assert.match(markup, /h-10 text-right/);
 });
