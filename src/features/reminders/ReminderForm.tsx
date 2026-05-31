@@ -5,6 +5,7 @@ import { useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
+import { RupiahInput } from "@/components/ui/RupiahInput";
 import { Select } from "@/components/ui/Select";
 import {
   allowedReminderOffsets,
@@ -206,14 +207,12 @@ export function ReminderForm({
           type="date"
           value={values.dueDate}
         />
-        <Input
+        <RupiahInput
           label="Estimasi biaya"
           min="1"
           name="amount"
-          onChange={(event) => updateValue("amount", event.target.value ? Number(event.target.value) : null)}
+          onValueChange={(value) => updateValue("amount", value ? Number(value) : null)}
           placeholder="350000"
-          step="1"
-          type="number"
           value={values.amount ?? ""}
         />
         <Select

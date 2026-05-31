@@ -3,6 +3,7 @@ import type { Category } from "@prisma/client";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
+import { RupiahInput } from "@/components/ui/RupiahInput";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { Select } from "@/components/ui/Select";
 import { upsertBudgetAction } from "@/features/budgets/actions";
@@ -46,8 +47,7 @@ export function BudgetForm({ categories }: { categories: Category[] }) {
             ))}
           </Select>
           <div>
-            <Input label="Nominal" min="0" name="amount" required step="1" type="number" />
-            <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">Masukkan nominal Rupiah tanpa titik atau koma.</p>
+            <RupiahInput label="Nominal" min="0" name="amount" required />
           </div>
           <div className="md:col-span-2">
             <Button type="submit">Simpan</Button>

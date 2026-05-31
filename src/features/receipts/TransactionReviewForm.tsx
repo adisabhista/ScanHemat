@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
+import { RupiahInput } from "@/components/ui/RupiahInput";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { Select } from "@/components/ui/Select";
 import { createTransactionAction } from "@/features/transactions/actions";
@@ -259,14 +260,12 @@ export function TransactionReviewForm({
           />
           {datePreview ? <p className="mt-1 text-xs text-slate-500">Tanggal terpilih: {datePreview}</p> : null}
         </div>
-        <Input
+        <RupiahInput
           label="Total"
           min="0"
           name="totalAmount"
-          onChange={(event) => setTotalAmount(event.target.value)}
+          onValueChange={setTotalAmount}
           required
-          step="1"
-          type="number"
           value={totalAmount}
         />
         <Select value={categoryId} onChange={(event) => setCategoryId(event.target.value)} label="Kategori" name="categoryId" required>
@@ -304,13 +303,11 @@ export function TransactionReviewForm({
                 onChange={(event) => updateItem(index, "name", event.target.value)}
                 placeholder="Nama item"
               />
-              <Input
+              <RupiahInput
                 aria-label="Harga item"
                 min="0"
-                step="1"
-                type="number"
                 value={item.totalPrice ?? ""}
-                onChange={(event) => updateItem(index, "totalPrice", event.target.value)}
+                onValueChange={(value) => updateItem(index, "totalPrice", value)}
                 placeholder="Harga"
               />
               <button

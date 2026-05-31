@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
+import { RupiahInput } from "@/components/ui/RupiahInput";
 import { Select } from "@/components/ui/Select";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { deleteTransactionAction, markTransactionReviewedAction, updateTransactionAction } from "@/features/transactions/actions";
@@ -110,7 +111,7 @@ export function TransactionEditForm({
             <p className="mt-1 text-xs text-slate-500">Tanggal terpilih: {datePreview}</p>
           ) : null}
         </div>
-        <Input defaultValue={transaction.totalAmount.toString()} label="Total" min="0" name="totalAmount" required step="1" type="number" />
+        <RupiahInput defaultValue={transaction.totalAmount.toString()} label="Total" min="0" name="totalAmount" required />
         <Select defaultValue={transaction.categoryId} label="Kategori" name="categoryId" required>
           {categories.map((category) => (
             <option key={category.id} value={category.id}>
@@ -140,20 +141,16 @@ export function TransactionEditForm({
           {items.map((item, index) => (
             <div className="grid gap-2 rounded-md border border-slate-200 p-3 sm:grid-cols-[1fr_120px_120px_auto]" key={index}>
               <Input value={item.name} onChange={(event) => updateItem(index, "name", event.target.value)} placeholder="Nama item" />
-              <Input
+              <RupiahInput
                 min="0"
-                step="1"
-                type="number"
                 value={item.unitPrice ?? ""}
-                onChange={(event) => updateItem(index, "unitPrice", event.target.value)}
+                onValueChange={(value) => updateItem(index, "unitPrice", value)}
                 placeholder="Harga"
               />
-              <Input
+              <RupiahInput
                 min="0"
-                step="1"
-                type="number"
                 value={item.totalPrice ?? ""}
-                onChange={(event) => updateItem(index, "totalPrice", event.target.value)}
+                onValueChange={(value) => updateItem(index, "totalPrice", value)}
                 placeholder="Total"
               />
               <button
