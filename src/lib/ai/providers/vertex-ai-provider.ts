@@ -1,5 +1,3 @@
-import "server-only";
-
 import { createPartFromBase64, GoogleGenAI } from "@google/genai";
 import type { Content, GenerateContentConfig, GenerateContentParameters, GenerateContentResponse } from "@google/genai";
 

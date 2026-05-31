@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { randomUUID } from "crypto";
 
 import { getAvailableCategories } from "@/features/categories/queries";
 import { requireUserId } from "@/lib/auth";
@@ -15,8 +16,11 @@ import { googleDocumentAiLowConfidenceThreshold } from "@/lib/ocr/providers/goog
 import { serializeError } from "@/lib/ocr/serialize-error";
 import { parseReceiptText } from "@/lib/parser/receipt-parser";
 import { prisma } from "@/lib/prisma";
+import { enforceUserRateLimit } from "@/lib/rate-limit-policy";
+import { getReceiptPreviewUrl } from "@/lib/receipts/preview-url";
 import { getReceiptReviewState } from "@/lib/review/review-state";
-import { receiptStorage } from "@/lib/storage/local-storage-service";
+import { getSafeErrorCode, logServerEvent } from "@/lib/logging/server-log";
+import { getReceiptStorage, resolveReceiptStorageProviderName } from "@/lib/storage/storage-provider";
 import { getMaxReceiptUploadBytes, receiptUploadSchema } from "@/lib/validation/receipt";
 
 export const runtime = "nodejs";
@@ -68,6 +72,12 @@ function getDevelopmentOcrDebug(error: unknown) {
 export async function POST(request: Request) {
   try {
     const userId = await requireUserId();
+    const rateLimitResponse = enforceUserRateLimit("receiptUpload", userId);
+
+    if (rateLimitResponse) {
+      return rateLimitResponse;
+    }
+
     const formData = await request.formData();
     const file = formData.get("file");
     const parsedFile = receiptUploadSchema.safeParse({ file });
@@ -80,17 +90,34 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Ukuran file terlalu besar." }, { status: 400 });
     }
 
-    const storedFile = await receiptStorage.saveReceipt(parsedFile.data.file, userId);
-    const receipt = await prisma.receipt.create({
-      data: {
-        userId,
-        ...storedFile,
-        status: "OCR_PROCESSING"
-      }
+    const storage = getReceiptStorage();
+    const receiptId = randomUUID();
+    logServerEvent("receipt.upload.started", {
+      receiptId,
+      storageProvider: resolveReceiptStorageProviderName(),
+      ocrProvider: process.env.OCR_PROVIDER?.trim() || "google-document-ai",
+      aiProvider: process.env.AI_GENERATION_PROVIDER?.trim() || "gemini-api",
+      extractionStrategy: process.env.RECEIPT_EXTRACTION_STRATEGY?.trim() || "hybrid"
     });
+    const storedFile = await storage.saveReceipt(parsedFile.data.file, userId, receiptId);
+    let receipt;
 
     try {
-      const content = await receiptStorage.readReceipt(storedFile.filePath, userId);
+      receipt = await prisma.receipt.create({
+        data: {
+          id: receiptId,
+          userId,
+          ...storedFile,
+          status: "OCR_PROCESSING"
+        }
+      });
+    } catch (error) {
+      await storage.deleteReceipt(storedFile.filePath, userId).catch(() => undefined);
+      throw error;
+    }
+
+    try {
+      const content = await storage.readReceipt(storedFile.filePath, userId);
       const ocrResult = await extractReceiptText({
         content,
         fileName: storedFile.fileName,
@@ -108,7 +135,7 @@ export async function POST(request: Request) {
           finalReceipt = validateAndMergeAiResult(aiResult, parsedReceipt);
         }
       } catch (err) {
-        console.warn("[AI] Extractor failed, falling back to standard parser:", err);
+        logServerEvent("receipt.ai.fallback", { receiptId, errorCode: getSafeErrorCode(err) });
         const warnMsg = getAiGenerationUserMessage(err, "Ekstraksi AI gagal. Hasil diambil dari OCR biasa dan perlu diperiksa.");
         finalReceipt.warnings = [...(finalReceipt.warnings ?? []), warnMsg];
         finalReceipt.confidence = "low";
@@ -183,6 +210,11 @@ export async function POST(request: Request) {
 
       finalReceipt.audit = generateReceiptAudit({ rawText, parsedReceipt: finalReceipt });
       const reviewState = getReceiptReviewState(finalReceipt, { lowOcrConfidence: hasLowOcrConfidence });
+      logServerEvent("receipt.upload.completed", {
+        receiptId,
+        ocrProvider: ocrResult.provider,
+        reviewNeeded: reviewState.needsReview
+      });
 
       const updatedReceipt = await prisma.receipt.update({
         where: { id: receipt.id },
@@ -199,7 +231,7 @@ export async function POST(request: Request) {
 
       return NextResponse.json({
         receiptId: updatedReceipt.id,
-        filePath: updatedReceipt.filePath,
+        previewUrl: getReceiptPreviewUrl(updatedReceipt.id),
         mimeType: updatedReceipt.mimeType,
         parsed: finalReceipt,
         ocr: {

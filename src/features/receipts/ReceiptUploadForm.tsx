@@ -20,7 +20,7 @@ type CategoryOption = {
 
 type UploadResult = {
   receiptId: string;
-  filePath: string;
+  previewUrl: string;
   mimeType: string;
   parsed: ParsedReceipt;
   ocr?: {
@@ -342,7 +342,7 @@ export function ReceiptUploadForm({ categories }: { categories: CategoryOption[]
               <div className="mt-4 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300">PDF struk sudah diproses di server.</div>
             ) : (
               <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-slate-100 dark:border-slate-700 dark:bg-slate-800">
-                <Image alt="Pratinjau struk" className="h-auto w-full object-contain" height={900} src={result.filePath} width={700} />
+                <Image alt="Pratinjau struk" className="h-auto w-full object-contain" height={900} src={result.previewUrl} unoptimized width={700} />
               </div>
             )}
           </Card>

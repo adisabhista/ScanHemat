@@ -5,6 +5,7 @@ import { requireUserId } from "@/lib/auth";
 import { generateReceiptAudit } from "@/lib/audit/receipt-audit";
 import { parseReceiptText } from "@/lib/parser/receipt-parser";
 import { prisma } from "@/lib/prisma";
+import { getReceiptPreviewUrl } from "@/lib/receipts/preview-url";
 import { getReceiptReviewState } from "@/lib/review/review-state";
 
 const ocrResultSchema = z.object({
@@ -51,7 +52,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
     return NextResponse.json({
       receiptId: updatedReceipt.id,
-      filePath: updatedReceipt.filePath,
+      previewUrl: getReceiptPreviewUrl(updatedReceipt.id),
       mimeType: updatedReceipt.mimeType,
       parsed: parsedReceipt
     });

@@ -1,5 +1,3 @@
-import "server-only";
-
 import { createPartFromBase64, GoogleGenAI } from "@google/genai";
 import type { Content, GenerateContentConfig, GenerateContentParameters, GenerateContentResponse } from "@google/genai";
 
@@ -81,6 +79,14 @@ export class GeminiApiProvider implements AiGenerationProvider {
           errorCode: primaryError.code,
           errorMessage: getSafeResponsePreview(primaryError.message)
         };
+        console.info(JSON.stringify({
+          event: "ai.model.fallback",
+          provider: this.name,
+          primaryModel,
+          fallbackModel,
+          fallbackUsed: true,
+          errorCode: primaryError.code
+        }));
 
         if (process.env.NODE_ENV === "development") {
           console.warn("[AI] Gemini API model fallback used", this.lastCallDebug);

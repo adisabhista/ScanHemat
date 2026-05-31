@@ -1,0 +1,15 @@
+node_modules
+.next
+.data
+.env
+.env.*
+!.env.example
+public/uploads
+*.log
+*credentials*.json
+*service-account*.json
+*service_account*.json
+tsconfig.tsbuildinfo
+.git
+.github
+docs

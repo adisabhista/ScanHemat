@@ -311,7 +311,7 @@ function buildGoogleDebugPayload(
     provider: "google-document-ai",
     code,
     message: options?.message ?? (deepMsg !== "Unknown error" ? deepMsg : serialized.message),
-    missingEnvKeys: [...envStatus.missing, ...(diag.credentialFileConfigured ? [] : ["GOOGLE_APPLICATION_CREDENTIALS"])],
+    missingEnvKeys: envStatus.missing,
     presentEnvKeys: [...envStatus.present, ...(diag.credentialFileConfigured ? ["GOOGLE_APPLICATION_CREDENTIALS"] : [])],
     errorName: serialized.name ?? getGoogleErrorName(error),
     googleCode: typeof serialized.code === "number" ? serialized.code : getDeepGoogleErrorCode(error),
@@ -399,7 +399,7 @@ export function classifyGoogleDocumentAiError(error: unknown): OcrProcessingErro
     return new OcrProcessingError({
       code: "authentication",
       message,
-      userMessage: "Autentikasi Google Cloud gagal. Periksa GOOGLE_APPLICATION_CREDENTIALS.",
+      userMessage: "Autentikasi Google Cloud gagal. Periksa credential atau service account Cloud Run.",
       cause: error,
       debug: buildGoogleDebugPayload(error, "UNAUTHENTICATED", debugOptions)
     });
@@ -449,7 +449,7 @@ export function classifyGoogleDocumentAiError(error: unknown): OcrProcessingErro
 
   // --- Credential file issues (fallback when no keyword match) ---
 
-  if (!cred.credentialFilePresent || !cred.credentialFileReadable) {
+  if (process.env.GOOGLE_APPLICATION_CREDENTIALS?.trim() && (!cred.credentialFilePresent || !cred.credentialFileReadable)) {
     return new OcrProcessingError({
       code: "authentication",
       message: message || "Credential file not found or unreadable",

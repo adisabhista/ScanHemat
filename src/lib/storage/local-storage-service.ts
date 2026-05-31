@@ -1,7 +1,8 @@
 import { randomUUID } from "crypto";
-import { mkdir, readFile, writeFile } from "fs/promises";
+import { access, mkdir, readFile, rm, writeFile } from "fs/promises";
 import path from "path";
 
+import { assertReceiptObjectPath, buildReceiptObjectPath, getSafeReceiptFileName } from "@/lib/storage/storage-path";
 import type { StorageService, StoredFile } from "@/lib/storage/storage-service";
 
 const extensionByMimeType: Record<string, string> = {
@@ -11,49 +12,58 @@ const extensionByMimeType: Record<string, string> = {
   "application/pdf": "pdf"
 };
 
-const uploadRoot = path.join(process.cwd(), "public", "uploads", "receipts");
-const publicUploadRoot = "/uploads/receipts";
+const uploadRoot = path.join(process.cwd(), ".data");
+const legacyUploadRoot = path.join(process.cwd(), "public", "uploads", "receipts");
+const legacyPublicUploadRoot = "/uploads/receipts";
 
 export class LocalStorageService implements StorageService {
-  async saveReceipt(file: File, userId: string): Promise<StoredFile> {
+  async saveReceipt(file: File, userId: string, receiptId: string): Promise<StoredFile> {
     const extension = extensionByMimeType[file.type] ?? "jpg";
-    const fileName = `${randomUUID()}.${extension}`;
-    const directory = path.join(uploadRoot, userId);
-    const absolutePath = path.join(directory, fileName);
+    const safeOriginalName = getSafeReceiptFileName(file.name || `receipt.${extension}`);
+    const fileName = `${randomUUID()}-${safeOriginalName}`;
+    const filePath = buildReceiptObjectPath(userId, receiptId, fileName);
+    const absolutePath = resolveLocalPath(filePath, userId);
 
-    await mkdir(directory, { recursive: true });
+    await mkdir(path.dirname(absolutePath), { recursive: true });
 
     const buffer = Buffer.from(await file.arrayBuffer());
     await writeFile(absolutePath, buffer);
 
-    const publicPath = path.join(publicUploadRoot, userId, fileName).replaceAll("\\", "/");
-
     return {
       fileName,
-      filePath: publicPath,
+      filePath,
       mimeType: file.type,
       fileSize: file.size
     };
   }
 
   async readReceipt(filePath: string, userId: string): Promise<Buffer> {
-    const normalizedPublicPath = path.posix.normalize(filePath);
-    const expectedPrefix = `${publicUploadRoot}/${userId}/`;
+    return readFile(resolveLocalPath(filePath, userId));
+  }
 
-    if (!normalizedPublicPath.startsWith(expectedPrefix)) {
-      throw new Error("Receipt file path is outside the user upload directory.");
-    }
+  async deleteReceipt(filePath: string, userId: string) {
+    await rm(resolveLocalPath(filePath, userId), { force: true });
+  }
 
-    const fileName = path.posix.basename(normalizedPublicPath);
-    const absolutePath = path.resolve(uploadRoot, userId, fileName);
-    const userDirectory = path.resolve(uploadRoot, userId);
-
-    if (!absolutePath.startsWith(`${userDirectory}${path.sep}`)) {
-      throw new Error("Receipt file path is outside the user upload directory.");
-    }
-
-    return readFile(absolutePath);
+  async healthCheck() {
+    await mkdir(uploadRoot, { recursive: true });
+    await access(uploadRoot);
   }
 }
 
-export const receiptStorage = new LocalStorageService();
+function resolveLocalPath(filePath: string, userId: string) {
+  if (filePath.startsWith(`${legacyPublicUploadRoot}/${userId}/`)) {
+    const fileName = path.posix.basename(path.posix.normalize(filePath));
+    return path.join(legacyUploadRoot, userId, fileName);
+  }
+
+  const normalizedPath = assertReceiptObjectPath(filePath, userId);
+  const absolutePath = path.resolve(uploadRoot, normalizedPath);
+  const resolvedRoot = path.resolve(uploadRoot);
+
+  if (!absolutePath.startsWith(`${resolvedRoot}${path.sep}`)) {
+    throw new Error("Receipt file path is outside the storage root.");
+  }
+
+  return absolutePath;
+}

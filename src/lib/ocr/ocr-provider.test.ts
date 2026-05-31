@@ -89,7 +89,7 @@ test("maps Google unauthenticated errors", () => {
   const error = classifyGoogleDocumentAiError(Object.assign(new Error("Request had invalid authentication credentials."), { code: 16 }));
 
   assert.equal(error.code, "authentication");
-  assert.equal(error.userMessage, "Autentikasi Google Cloud gagal. Periksa GOOGLE_APPLICATION_CREDENTIALS.");
+  assert.equal(error.userMessage, "Autentikasi Google Cloud gagal. Periksa credential atau service account Cloud Run.");
   assert.equal(error.debug?.code, "UNAUTHENTICATED");
 });
 
@@ -240,6 +240,22 @@ test("classifies credential file missing as authentication error", () => {
     if (prev === undefined) {
       delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
     } else {
+      process.env.GOOGLE_APPLICATION_CREDENTIALS = prev;
+    }
+  }
+});
+
+test("allows Application Default Credentials when credential file env is not set", () => {
+  const prev = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+  delete process.env.GOOGLE_APPLICATION_CREDENTIALS;
+
+  try {
+    const error = classifyGoogleDocumentAiError(new Error("Unexpected upstream failure"));
+
+    assert.equal(error.code, "google-api");
+    assert.ok(!error.debug?.missingEnvKeys?.includes("GOOGLE_APPLICATION_CREDENTIALS"));
+  } finally {
+    if (prev !== undefined) {
       process.env.GOOGLE_APPLICATION_CREDENTIALS = prev;
     }
   }

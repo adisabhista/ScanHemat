@@ -3,6 +3,8 @@ import { z } from "zod";
 
 import { generateAssistantAgentAnswer } from "@/lib/assistant/gemini-agent";
 import { requireUserId } from "@/lib/auth";
+import { logServerEvent } from "@/lib/logging/server-log";
+import { enforceUserRateLimit } from "@/lib/rate-limit-policy";
 
 export const runtime = "nodejs";
 
@@ -24,6 +26,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Anda perlu masuk untuk menggunakan Asisten Hemat." }, { status: 401 });
   }
 
+  const rateLimitResponse = enforceUserRateLimit("assistantChat", userId);
+
+  if (rateLimitResponse) {
+    return rateLimitResponse;
+  }
+
   const body = await request.json().catch(() => null);
   const parsed = assistantChatRequestSchema.safeParse(body);
 
@@ -41,6 +49,10 @@ export async function POST(request: Request) {
     const assistantResponse = await generateAssistantAgentAnswer({
       userId,
       messages: parsed.data.messages
+    });
+    logServerEvent("assistant.chat.completed", {
+      toolNames: assistantResponse.toolCalls.map((toolCall) => toolCall.name).join(","),
+      fallbackUsed: assistantResponse.fallbackUsed
     });
 
     if (process.env.NODE_ENV === "development") {

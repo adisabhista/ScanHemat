@@ -6,6 +6,8 @@ export type StoredFile = {
 };
 
 export interface StorageService {
-  saveReceipt(file: File, userId: string): Promise<StoredFile>;
+  saveReceipt(file: File, userId: string, receiptId: string): Promise<StoredFile>;
   readReceipt(filePath: string, userId: string): Promise<Buffer>;
+  deleteReceipt(filePath: string, userId: string): Promise<void>;
+  healthCheck(): Promise<void>;
 }

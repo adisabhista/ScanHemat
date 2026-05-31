@@ -8,8 +8,11 @@ import { mergeVisionVerificationResult } from "@/lib/ai/vision-verification";
 import { generateReceiptAudit } from "@/lib/audit/receipt-audit";
 import type { ParsedReceipt } from "@/lib/parser/receipt-parser";
 import { prisma } from "@/lib/prisma";
+import { enforceUserRateLimit } from "@/lib/rate-limit-policy";
+import { getReceiptPreviewUrl } from "@/lib/receipts/preview-url";
 import { getReceiptReviewState } from "@/lib/review/review-state";
-import { receiptStorage } from "@/lib/storage/local-storage-service";
+import { getSafeErrorCode, logServerEvent } from "@/lib/logging/server-log";
+import { getReceiptStorage } from "@/lib/storage/storage-provider";
 
 export const runtime = "nodejs";
 
@@ -18,6 +21,12 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
 
   try {
     const userId = await requireUserId();
+    const rateLimitResponse = enforceUserRateLimit("visionVerify", userId);
+
+    if (rateLimitResponse) {
+      return rateLimitResponse;
+    }
+
     const { id } = await params;
     const receipt = await prisma.receipt.findFirst({
       where: {
@@ -40,9 +49,13 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     }
 
     const currentExtraction = receipt.parsedData as ParsedReceipt;
-    const imageBuffer = await receiptStorage.readReceipt(receipt.filePath, userId);
+    const imageBuffer = await getReceiptStorage().readReceipt(receipt.filePath, userId);
     const generationProvider = await createAiGenerationProvider();
     const verifier = new GeminiVisionReceiptVerifier(generationProvider);
+    logServerEvent("receipt.vision.started", {
+      receiptId: receipt.id,
+      aiProvider: generationProvider.name
+    });
 
     if (process.env.NODE_ENV === "development") {
       console.debug("[Vision] vision verifier triggered", { receiptId: receipt.id, mimeType: receipt.mimeType });
@@ -58,6 +71,11 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
     const mergedReceipt = mergeVisionVerificationResult(currentExtraction, verification);
     mergedReceipt.audit = generateReceiptAudit({ rawText: receipt.rawText, parsedReceipt: mergedReceipt });
     const reviewState = getReceiptReviewState(mergedReceipt);
+    logServerEvent("receipt.vision.completed", {
+      receiptId: receipt.id,
+      correctionCount: verification.corrections.length,
+      reviewNeeded: reviewState.needsReview
+    });
 
     const updatedReceipt = await prisma.receipt.update({
       where: { id: receipt.id },
@@ -81,12 +99,13 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
 
     return NextResponse.json({
       receiptId: updatedReceipt.id,
-      filePath: updatedReceipt.filePath,
+      previewUrl: getReceiptPreviewUrl(updatedReceipt.id),
       mimeType: updatedReceipt.mimeType,
       parsed: mergedReceipt,
       corrections: verification.corrections
     });
   } catch (error) {
+    logServerEvent("receipt.vision.failed", { errorCode: getSafeErrorCode(error) });
     if (process.env.NODE_ENV === "development") {
       console.error("[Vision] Gemini Vision failed", error);
     }
