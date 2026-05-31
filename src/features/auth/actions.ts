@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 
 import { prisma } from "@/lib/prisma";
 import { registerSchema } from "@/lib/validation/auth";
+import { createRegisteredUser } from "./service";
 
 export async function registerUserAction(formData: FormData) {
   const parsed = registerSchema.safeParse({
@@ -27,12 +28,10 @@ export async function registerUserAction(formData: FormData) {
 
   const passwordHash = await hash(parsed.data.password, 12);
 
-  await prisma.user.create({
-    data: {
-      name: parsed.data.name,
-      email: parsed.data.email,
-      passwordHash
-    }
+  await createRegisteredUser({
+    name: parsed.data.name,
+    email: parsed.data.email,
+    passwordHash
   });
 
   redirect("/login?registered=1");

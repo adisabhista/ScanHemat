@@ -1,12 +1,37 @@
 import { prisma } from "@/lib/prisma";
+import { ensureDefaultCategoriesForUser } from "./service";
 
 export async function getAvailableCategories(userId: string) {
-  return prisma.category.findMany({
+  await ensureDefaultCategoriesForUser(userId);
+
+  const categories = await prisma.category.findMany({
     where: {
       OR: [{ userId }, { userId: null, isDefault: true }]
     },
     orderBy: [{ isDefault: "desc" }, { name: "asc" }]
   });
+
+  return deduplicateAvailableCategories(categories, userId);
+}
+
+export function deduplicateAvailableCategories<T extends { userId: string | null; name: string; isDefault: boolean }>(
+  categories: T[],
+  userId: string
+) {
+  const categoriesByName = new Map<string, T>();
+
+  for (const category of categories) {
+    const key = category.name.trim().toLocaleLowerCase("id-ID");
+    const current = categoriesByName.get(key);
+
+    if (!current || (current.userId !== userId && category.userId === userId)) {
+      categoriesByName.set(key, category);
+    }
+  }
+
+  return [...categoriesByName.values()].sort(
+    (left, right) => Number(right.isDefault) - Number(left.isDefault) || left.name.localeCompare(right.name, "id-ID")
+  );
 }
 
 export async function getCategorySummaries(userId: string, date = new Date()) {
