@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
+import { PendingSubmitButton } from "@/components/ui/PendingSubmitButton";
 import { RupiahInput } from "@/components/ui/RupiahInput";
 import { SectionHeader } from "@/components/ui/SectionHeader";
 import { Select } from "@/components/ui/Select";
@@ -295,21 +296,34 @@ export function TransactionReviewForm({
             </button>
           </div>
           {items.length === 0 ? <p className="text-sm text-slate-500">Belum ada item terbaca.</p> : null}
+          {items.length > 0 ? (
+            <div className="hidden grid-cols-[minmax(0,1fr)_160px_auto] gap-2 px-3 text-xs font-semibold uppercase text-slate-500 sm:grid">
+              <span>Nama Item</span>
+              <span>Total Item</span>
+              <span className="text-right">Aksi</span>
+            </div>
+          ) : null}
           {items.map((item, index) => (
             <div className="grid gap-2 rounded-xl border border-slate-200 p-3 sm:grid-cols-[1fr_160px_auto] dark:border-slate-700" key={`${item.name}-${index}`}>
-              <Input
-                aria-label="Nama item"
-                value={item.name}
-                onChange={(event) => updateItem(index, "name", event.target.value)}
-                placeholder="Nama item"
-              />
-              <RupiahInput
-                aria-label="Harga item"
-                min="0"
-                value={item.totalPrice ?? ""}
-                onValueChange={(value) => updateItem(index, "totalPrice", value)}
-                placeholder="Harga"
-              />
+              <div className="grid gap-1.5">
+                <span className="text-xs font-semibold text-slate-500 sm:hidden">Nama Item</span>
+                <Input
+                  aria-label="Nama Item"
+                  value={item.name}
+                  onChange={(event) => updateItem(index, "name", event.target.value)}
+                  placeholder="Nama item"
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <span className="text-xs font-semibold text-slate-500 sm:hidden">Total Item</span>
+                <RupiahInput
+                  aria-label="Total Item"
+                  min="0"
+                  value={item.totalPrice ?? ""}
+                  onValueChange={(value) => updateItem(index, "totalPrice", value)}
+                  placeholder="Total item"
+                />
+              </div>
               <button
                 className="rounded-xl px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-500"
                 onClick={() => setItems((current) => current.filter((_, itemIndex) => itemIndex !== index))}
@@ -320,7 +334,7 @@ export function TransactionReviewForm({
             </div>
           ))}
         </div>
-        <Button type="submit">Simpan</Button>
+        <PendingSubmitButton />
       </form>
     </Card>
   );

@@ -6,19 +6,14 @@ import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
+import { PendingSubmitButton } from "@/components/ui/PendingSubmitButton";
 import { RupiahInput } from "@/components/ui/RupiahInput";
 import { Select } from "@/components/ui/Select";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 import { deleteTransactionAction, markTransactionReviewedAction, updateTransactionAction } from "@/features/transactions/actions";
+import { TransactionItemsEditor, type EditableTransactionItem } from "@/features/transactions/TransactionItemsEditor";
 import { TransactionSourceBadge } from "@/features/transactions/TransactionSourceBadge";
 import { toInputDate, formatIndonesianDateLabel } from "@/lib/format/date";
-
-type EditableItem = {
-  name: string;
-  quantity?: string;
-  unitPrice?: string;
-  totalPrice?: string;
-};
 
 export function TransactionEditForm({
   transaction,
@@ -38,7 +33,7 @@ export function TransactionEditForm({
   };
   categories: Category[];
 }) {
-  const [items, setItems] = useState<EditableItem[]>(
+  const [items, setItems] = useState<EditableTransactionItem[]>(
     transaction.items.map((item) => ({
       name: item.name,
       quantity: item.quantity?.toString(),
@@ -67,10 +62,6 @@ export function TransactionEditForm({
   const reviewReasons = Array.isArray(transaction.reviewReason)
     ? transaction.reviewReason.filter((reason): reason is string => typeof reason === "string")
     : [];
-
-  function updateItem(index: number, field: keyof EditableItem, value: string) {
-    setItems((current) => current.map((item, itemIndex) => (itemIndex === index ? { ...item, [field]: value } : item)));
-  }
 
   const datePreview = formatIndonesianDateLabel(transactionDate);
 
@@ -127,44 +118,9 @@ export function TransactionEditForm({
             name="notes"
           />
         </label>
-        <div className="grid gap-3">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-slate-900">Item</h3>
-            <button
-              className="text-sm font-semibold text-brand-700"
-              onClick={() => setItems((current) => [...current, { name: "" }])}
-              type="button"
-            >
-              Tambah item
-            </button>
-          </div>
-          {items.map((item, index) => (
-            <div className="grid gap-2 rounded-md border border-slate-200 p-3 sm:grid-cols-[1fr_120px_120px_auto]" key={index}>
-              <Input value={item.name} onChange={(event) => updateItem(index, "name", event.target.value)} placeholder="Nama item" />
-              <RupiahInput
-                min="0"
-                value={item.unitPrice ?? ""}
-                onValueChange={(value) => updateItem(index, "unitPrice", value)}
-                placeholder="Harga"
-              />
-              <RupiahInput
-                min="0"
-                value={item.totalPrice ?? ""}
-                onValueChange={(value) => updateItem(index, "totalPrice", value)}
-                placeholder="Total"
-              />
-              <button
-                className="rounded-md px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50"
-                onClick={() => setItems((current) => current.filter((_, itemIndex) => itemIndex !== index))}
-                type="button"
-              >
-                Hapus
-              </button>
-            </div>
-          ))}
-        </div>
+        <TransactionItemsEditor items={items} onItemsChange={setItems} />
         <div className="flex flex-col gap-3 sm:flex-row">
-          <Button type="submit">Simpan</Button>
+          <PendingSubmitButton />
           <Button formAction={deleteAction} type="submit" variant="danger">
             Hapus
           </Button>

@@ -55,6 +55,9 @@ test("receipt review displays formatted Rupiah totals while submitting numeric v
   assert.match(markup, /value="12\.425"/);
   assert.match(markup, /value="23\.190"/);
   assert.match(markup, /value="16\.990"/);
+  assert.match(markup, /Nama Item/);
+  assert.match(markup, /Total Item/);
+  assert.match(markup, /Aksi/);
   assert.match(markup, /&quot;totalPrice&quot;:12425/);
   assert.match(markup, /&quot;totalPrice&quot;:23190/);
   assert.match(markup, /&quot;totalPrice&quot;:16990/);

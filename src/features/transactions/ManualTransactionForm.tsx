@@ -2,24 +2,18 @@
 
 import { useMemo, useState } from "react";
 
-import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
+import { PendingSubmitButton } from "@/components/ui/PendingSubmitButton";
 import { RupiahInput } from "@/components/ui/RupiahInput";
 import { Select } from "@/components/ui/Select";
 import { createTransactionAction } from "@/features/transactions/actions";
+import { TransactionItemsEditor, type EditableTransactionItem } from "@/features/transactions/TransactionItemsEditor";
 import { formatIndonesianDateLabel } from "@/lib/format/date";
 
 type CategoryOption = {
   id: string;
   name: string;
-};
-
-type ManualItem = {
-  name: string;
-  quantity?: string;
-  unitPrice?: string;
-  totalPrice?: string;
 };
 
 function getTodayInputValue() {
@@ -28,7 +22,7 @@ function getTodayInputValue() {
 
 export function ManualTransactionForm({ categories }: { categories: CategoryOption[] }) {
   const defaultCategory = categories.find((category) => category.name === "Lainnya") ?? categories[0];
-  const [items, setItems] = useState<ManualItem[]>([]);
+  const [items, setItems] = useState<EditableTransactionItem[]>([]);
   const [transactionDate, setTransactionDate] = useState(getTodayInputValue());
   const serializedItems = useMemo(
     () =>
@@ -44,10 +38,6 @@ export function ManualTransactionForm({ categories }: { categories: CategoryOpti
       ),
     [items]
   );
-
-  function updateItem(index: number, field: keyof ManualItem, value: string) {
-    setItems((current) => current.map((item, itemIndex) => (itemIndex === index ? { ...item, [field]: value } : item)));
-  }
 
   const datePreview = formatIndonesianDateLabel(transactionDate);
 
@@ -85,44 +75,8 @@ export function ManualTransactionForm({ categories }: { categories: CategoryOpti
             placeholder="Catatan tambahan"
           />
         </label>
-        <div className="grid gap-3">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="text-sm font-semibold text-slate-900">Item opsional</h2>
-            <button
-              className="text-sm font-semibold text-brand-700"
-              onClick={() => setItems((current) => [...current, { name: "" }])}
-              type="button"
-            >
-              Tambah item
-            </button>
-          </div>
-          {items.length === 0 ? <p className="text-sm text-slate-500">Belum ada item.</p> : null}
-          {items.map((item, index) => (
-            <div className="grid gap-2 rounded-md border border-slate-200 p-3 sm:grid-cols-[1fr_120px_120px_auto]" key={index}>
-              <Input value={item.name} onChange={(event) => updateItem(index, "name", event.target.value)} placeholder="Nama item" />
-              <RupiahInput
-                min="0"
-                value={item.unitPrice ?? ""}
-                onValueChange={(value) => updateItem(index, "unitPrice", value)}
-                placeholder="Harga"
-              />
-              <RupiahInput
-                min="0"
-                value={item.totalPrice ?? ""}
-                onValueChange={(value) => updateItem(index, "totalPrice", value)}
-                placeholder="Total"
-              />
-              <button
-                className="rounded-md px-3 py-2 text-sm font-semibold text-red-600 hover:bg-red-50"
-                onClick={() => setItems((current) => current.filter((_, itemIndex) => itemIndex !== index))}
-                type="button"
-              >
-                Hapus
-              </button>
-            </div>
-          ))}
-        </div>
-        <Button type="submit">Simpan</Button>
+        <TransactionItemsEditor items={items} onItemsChange={setItems} />
+        <PendingSubmitButton />
       </form>
     </Card>
   );

@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 
 import { ensureCategoryAccess } from "@/features/categories/queries";
 import { buildTransactionReviewData, markTransactionReviewedForUser, type ReceiptReviewData } from "@/features/transactions/review";
+import { getTransactionSaveErrorPath, getTransactionSaveSuccessPath } from "@/features/transactions/save-navigation";
 import { requireUserId } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { DASHBOARD_ROUTE, NEW_TRANSACTION_ROUTE, SCAN_RECEIPT_ROUTE, TRANSACTIONS_ROUTE } from "@/lib/routes";
@@ -23,6 +24,19 @@ function parseItems(formData: FormData) {
   } catch {
     return [];
   }
+}
+
+function getSafeErrorCode(error: unknown) {
+  if (!error || typeof error !== "object") {
+    return "unknown";
+  }
+
+  const code = "code" in error ? error.code : undefined;
+  return typeof code === "string" || typeof code === "number" ? String(code) : "unknown";
+}
+
+function logTransactionSaveFailure(event: string, error: unknown) {
+  console.info(JSON.stringify({ event, errorCode: getSafeErrorCode(error) }));
 }
 
 function parseTransactionForm(formData: FormData) {
@@ -76,39 +90,47 @@ export async function createTransactionAction(formData: FormData) {
     transactionSource = receipt.mimeType === "application/pdf" ? TransactionSource.PDF_OCR : TransactionSource.RECEIPT_OCR;
   }
 
-  await prisma.transaction.create({
-    data: {
-      userId,
-      receiptId: parsed.data.receiptId ?? undefined,
-      merchant: parsed.data.merchant || null,
-      transactionDate: parsed.data.transactionDate,
-      totalAmount: new Prisma.Decimal(parsed.data.totalAmount),
-      categoryId: parsed.data.categoryId,
-      notes: parsed.data.notes || null,
-      source: transactionSource,
-      ...buildTransactionReviewData(receiptReview),
-      items: {
-        create:
-          parsed.data.items?.map((item) => ({
-            name: item.name,
-            quantity: item.quantity ? new Prisma.Decimal(item.quantity) : null,
-            unitPrice: item.unitPrice ? new Prisma.Decimal(item.unitPrice) : null,
-            totalPrice: item.totalPrice ? new Prisma.Decimal(item.totalPrice) : null
-          })) ?? []
-      }
-    }
-  });
-
-  if (parsed.data.receiptId) {
-    await prisma.receipt.update({
-      where: { id: parsed.data.receiptId },
-      data: { status: "CONFIRMED" }
-    });
+  try {
+    await prisma.$transaction([
+      prisma.transaction.create({
+        data: {
+          userId,
+          receiptId: parsed.data.receiptId ?? undefined,
+          merchant: parsed.data.merchant || null,
+          transactionDate: parsed.data.transactionDate,
+          totalAmount: new Prisma.Decimal(parsed.data.totalAmount),
+          categoryId: parsed.data.categoryId,
+          notes: parsed.data.notes || null,
+          source: transactionSource,
+          ...buildTransactionReviewData(receiptReview),
+          items: {
+            create:
+              parsed.data.items?.map((item) => ({
+                name: item.name,
+                quantity: item.quantity ? new Prisma.Decimal(item.quantity) : null,
+                unitPrice: item.unitPrice ? new Prisma.Decimal(item.unitPrice) : null,
+                totalPrice: item.totalPrice ? new Prisma.Decimal(item.totalPrice) : null
+              })) ?? []
+          }
+        }
+      }),
+      ...(parsed.data.receiptId
+        ? [
+            prisma.receipt.update({
+              where: { id: parsed.data.receiptId },
+              data: { status: "CONFIRMED" }
+            })
+          ]
+        : [])
+    ]);
+  } catch (error) {
+    logTransactionSaveFailure("transaction.create.failed", error);
+    redirect(getTransactionSaveErrorPath(errorPath));
   }
 
   revalidatePath(DASHBOARD_ROUTE);
   revalidatePath(TRANSACTIONS_ROUTE);
-  redirect(TRANSACTIONS_ROUTE);
+  redirect(getTransactionSaveSuccessPath());
 }
 
 export async function updateTransactionAction(id: string, formData: FormData) {
@@ -129,34 +151,39 @@ export async function updateTransactionAction(id: string, formData: FormData) {
     redirect("/transactions");
   }
 
-  await prisma.$transaction([
-    prisma.transactionItem.deleteMany({
-      where: { transactionId: id }
-    }),
-    prisma.transaction.update({
-      where: { id },
-      data: {
-        merchant: parsed.data.merchant || null,
-        transactionDate: parsed.data.transactionDate,
-        totalAmount: new Prisma.Decimal(parsed.data.totalAmount),
-        categoryId: parsed.data.categoryId,
-        notes: parsed.data.notes || null,
-        items: {
-          create:
-            parsed.data.items?.map((item) => ({
-              name: item.name,
-              quantity: item.quantity ? new Prisma.Decimal(item.quantity) : null,
-              unitPrice: item.unitPrice ? new Prisma.Decimal(item.unitPrice) : null,
-              totalPrice: item.totalPrice ? new Prisma.Decimal(item.totalPrice) : null
-            })) ?? []
+  try {
+    await prisma.$transaction([
+      prisma.transactionItem.deleteMany({
+        where: { transactionId: id }
+      }),
+      prisma.transaction.update({
+        where: { id },
+        data: {
+          merchant: parsed.data.merchant || null,
+          transactionDate: parsed.data.transactionDate,
+          totalAmount: new Prisma.Decimal(parsed.data.totalAmount),
+          categoryId: parsed.data.categoryId,
+          notes: parsed.data.notes || null,
+          items: {
+            create:
+              parsed.data.items?.map((item) => ({
+                name: item.name,
+                quantity: item.quantity ? new Prisma.Decimal(item.quantity) : null,
+                unitPrice: item.unitPrice ? new Prisma.Decimal(item.unitPrice) : null,
+                totalPrice: item.totalPrice ? new Prisma.Decimal(item.totalPrice) : null
+              })) ?? []
+          }
         }
-      }
-    })
-  ]);
+      })
+    ]);
+  } catch (error) {
+    logTransactionSaveFailure("transaction.update.failed", error);
+    redirect(getTransactionSaveErrorPath(`/transactions/${id}`));
+  }
 
   revalidatePath(DASHBOARD_ROUTE);
   revalidatePath(TRANSACTIONS_ROUTE);
-  redirect(`/transactions/${id}`);
+  redirect(getTransactionSaveSuccessPath());
 }
 
 export async function deleteTransactionAction(id: string) {
